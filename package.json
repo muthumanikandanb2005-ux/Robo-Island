@@ -1,0 +1,22 @@
+{
+  "name": "dynamic-island-windows",
+  "version": "1.0.0",
+  "description": "Ultra-sleek Dynamic Island for Windows with Animated Robo Eyes, Universal Media Controls & Live System Metrics",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-packager . \"Robo Island\" --platform=win32 --arch=x64 --icon=icon.ico --out=dist --overwrite --asar.unpack=\"**/*.{ico,png,ps1}\" --win32metadata.CompanyName=\"Robo Island\" --win32metadata.FileDescription=\"Robo Island - Dynamic Island for Windows\" --win32metadata.ProductName=\"Robo Island\" --win32metadata.InternalName=\"Robo Island\" --win32metadata.OriginalFilename=\"Robo Island.exe\" --win32metadata.LegalCopyright=\"Copyright (C) 2026 Robo Island\"",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^45.4.1"
+  },
+  "dependencies": {
+    "systeminformation": "^5.33.23"
+  }
+}

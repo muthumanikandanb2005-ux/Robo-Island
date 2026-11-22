@@ -1,0 +1,904 @@
+/* ==========================================================
+   ROBO ISLAND - ULTRA COMPACT EYES & FULL TRANSPARENCY
+   ========================================================== */
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    user-select: none;
+    -webkit-user-drag: none;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+body {
+    background: transparent !important;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+/* ================= CONTAINER ================= */
+.island {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    color: #f1f5f9;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 1. COLLAPSED VIEW: 100% FULL TRANSPARENCY, ONLY TINY EYES */
+.island.collapsed {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-radius: 9999px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.pill-view {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+}
+
+.island.expanded .pill-view {
+    display: none;
+}
+
+#mini-eyes-canvas {
+    display: block;
+    filter: drop-shadow(0 0 6px rgba(0, 240, 255, 0.6));
+    transition: transform 0.2s ease;
+}
+
+.island.collapsed:hover #mini-eyes-canvas {
+    transform: scale(1.12);
+}
+
+/* 2. EXPANDED VIEW: COMPLETE DASHBOARD */
+.island.expanded {
+    background: rgba(12, 14, 20, 0.94);
+    backdrop-filter: blur(32px) saturate(200%);
+    -webkit-backdrop-filter: blur(32px) saturate(200%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), 0 0 20px rgba(0, 240, 255, 0.15);
+    border-radius: 26px;
+    height: 100%;
+    padding: 14px 18px;
+    display: flex;
+    flex-direction: column;
+}
+
+.expanded-view {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+}
+
+.island.expanded .expanded-view {
+    display: flex;
+}
+
+/* Header */
+.island-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.app-logo-badge {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    box-shadow: 0 0 12px rgba(0, 240, 255, 0.4);
+    flex-shrink: 0;
+}
+
+.robo-avatar-wrapper {
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.robo-avatar-wrapper:hover {
+    transform: scale(1.05);
+}
+
+.robot-status-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.robot-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 0.5px;
+}
+
+.robot-status-pill {
+    font-size: 10px;
+    color: #00f0ff;
+    font-weight: 500;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.icon-btn {
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #94a3b8;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.icon-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+    color: #ffffff;
+    transform: scale(1.06);
+}
+
+.icon-btn.active {
+    background: rgba(0, 240, 255, 0.25);
+    color: #00f0ff;
+    border-color: rgba(0, 240, 255, 0.5);
+}
+
+/* Navigation Tabs */
+.island-nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 0;
+    flex-shrink: 0;
+    overflow-x: auto;
+}
+
+.island-nav::-webkit-scrollbar {
+    display: none;
+}
+
+.nav-tab {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: #94a3b8;
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.nav-tab:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.nav-tab.active {
+    background: linear-gradient(135deg, rgba(0, 240, 255, 0.25), rgba(59, 130, 246, 0.25));
+    border-color: rgba(0, 240, 255, 0.4);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 240, 255, 0.2);
+}
+
+/* Tabs Content */
+.tabs-content {
+    flex: 1;
+    position: relative;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-top: 4px;
+}
+
+.tabs-content::-webkit-scrollbar {
+    width: 4px;
+}
+.tabs-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+}
+
+.tab-panel {
+    display: none;
+    height: 100%;
+    animation: fadeIn 0.25s ease;
+}
+
+.tab-panel.active {
+    display: block;
+}
+
+/* ================= TAB 1: MEDIA PLAYER & PROGRESSIVE BAR ================= */
+.media-card {
+    display: flex;
+    gap: 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 18px;
+    padding: 14px;
+    align-items: center;
+}
+
+.media-art-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: 105px;
+    flex-shrink: 0;
+}
+
+.vinyl-disc {
+    width: 76px;
+    height: 76px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #222 35%, #111 65%, #050505 100%);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.7), inset 0 0 4px rgba(255, 255, 255, 0.3);
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.3s;
+}
+
+.vinyl-disc.spinning {
+    animation: spinDisc 3.5s linear infinite;
+}
+
+@keyframes spinDisc {
+    100% { transform: rotate(360deg); }
+}
+
+.vinyl-grooves {
+    position: absolute;
+    inset: 5px;
+    border-radius: 50%;
+    border: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.vinyl-center {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #00f0ff, #8b5cf6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 8px rgba(0, 240, 255, 0.5);
+}
+
+.vinyl-note {
+    width: 14px;
+    height: 14px;
+    color: #ffffff;
+}
+
+.media-wave-canvas {
+    border-radius: 6px;
+}
+
+.media-details {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow: hidden;
+}
+
+.media-header-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.source-badge {
+    background: rgba(0, 240, 255, 0.15);
+    color: #00f0ff;
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.status-badge {
+    background: rgba(255, 255, 255, 0.08);
+    color: #94a3b8;
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.status-badge.playing {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+}
+
+.media-title-scroll {
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.track-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.track-artist {
+    font-size: 11px;
+    color: #94a3b8;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ================= IMPROVED PROGRESSIVE BAR ================= */
+.timeline-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.time-label {
+    font-size: 10px;
+    color: #94a3b8;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    min-width: 28px;
+}
+
+.timeline-bar-bg {
+    flex: 1;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    position: relative;
+    cursor: pointer;
+    transition: height 0.15s ease;
+}
+
+.timeline-bar-bg:hover {
+    height: 10px;
+}
+
+.timeline-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #00f0ff, #3b82f6);
+    border-radius: 999px;
+    position: relative;
+    width: 0%;
+    transition: width 0.3s ease-out;
+}
+
+.timeline-thumb {
+    position: absolute;
+    right: -4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 0 8px #00f0ff;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.timeline-bar-bg:hover .timeline-thumb {
+    opacity: 1;
+}
+
+/* Controls */
+.media-controls-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 6px;
+}
+
+.media-ctrl-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    color: #f1f5f9;
+    border-radius: 50%;
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.media-ctrl-btn:hover {
+    background: rgba(255, 255, 255, 0.18);
+    transform: scale(1.1);
+}
+
+.media-ctrl-btn.play-main-btn {
+    width: 42px;
+    height: 42px;
+    background: linear-gradient(135deg, #00f0ff, #3b82f6);
+    color: #0f172a;
+    box-shadow: 0 4px 14px rgba(0, 240, 255, 0.4);
+}
+
+.media-ctrl-btn.play-main-btn:hover {
+    transform: scale(1.12);
+    box-shadow: 0 6px 20px rgba(0, 240, 255, 0.6);
+}
+
+.vol-control-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.media-ctrl-btn.mini-btn {
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* ================= TAB 2: STATS ================= */
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.stat-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 14px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.stat-card.full-span {
+    grid-column: span 2;
+}
+
+.stat-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.stat-card-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #94a3b8;
+    text-transform: uppercase;
+}
+
+.badge-tag {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 5px;
+    border-radius: 4px;
+}
+
+.tag-cyan { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
+.tag-green { background: rgba(52, 211, 153, 0.2); color: #34d399; }
+.tag-amber { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
+.tag-red { background: rgba(248, 113, 113, 0.2); color: #f87171; }
+
+.stat-main-number {
+    font-size: 24px;
+    font-weight: 800;
+    color: #ffffff;
+    line-height: 1;
+    margin: 2px 0;
+}
+
+.stat-unit {
+    font-size: 14px;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-left: 2px;
+}
+
+.stat-bar-track {
+    width: 100%;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    overflow: hidden;
+    margin: 3px 0;
+}
+
+.stat-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.4s ease;
+}
+
+.fill-cyan { background: linear-gradient(90deg, #38bdf8, #0284c7); }
+.fill-green { background: linear-gradient(90deg, #34d399, #059669); }
+.fill-amber { background: linear-gradient(90deg, #fbbf24, #d97706); }
+.fill-red { background: linear-gradient(90deg, #f87171, #dc2626); }
+
+.stat-subtext {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #64748b;
+}
+
+.stat-subtext strong {
+    color: #cbd5e1;
+}
+
+.disks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.disk-row {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.disk-info-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+}
+
+.disk-name { font-weight: 600; color: #e2e8f0; }
+.disk-used-text { color: #94a3b8; }
+
+/* ================= TAB 3: APPS ================= */
+.apps-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    height: 100%;
+}
+
+.apps-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.apps-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.apps-subtitle {
+    font-size: 10px;
+    color: #64748b;
+}
+
+.action-pill-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #00f0ff;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.action-pill-btn:hover {
+    background: rgba(0, 240, 255, 0.2);
+    transform: scale(1.04);
+}
+
+.process-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    max-height: 170px;
+    overflow-y: auto;
+}
+
+.proc-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 6px 10px;
+}
+
+.proc-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.proc-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #00f0ff;
+    box-shadow: 0 0 5px #00f0ff;
+}
+
+.proc-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.proc-pid {
+    font-size: 9px;
+    color: #64748b;
+}
+
+.proc-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.proc-mem {
+    font-size: 10px;
+    font-weight: 600;
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.12);
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
+.proc-kill-btn {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #f87171;
+    border-radius: 5px;
+    padding: 2px 6px;
+    font-size: 9px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.proc-kill-btn:hover {
+    background: rgba(239, 68, 68, 0.4);
+    color: #ffffff;
+}
+
+/* ================= TAB 4: ROBO LAB ================= */
+.robo-lab-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.robo-lab-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.lab-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #cbd5e1;
+}
+
+.lab-subtext {
+    font-size: 10px;
+    color: #64748b;
+}
+
+.mood-button-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.mood-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #cbd5e1;
+    border-radius: 7px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.mood-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+}
+
+.mood-btn.active {
+    background: rgba(0, 240, 255, 0.2);
+    border-color: rgba(0, 240, 255, 0.5);
+    color: #00f0ff;
+    box-shadow: 0 0 8px rgba(0, 240, 255, 0.25);
+}
+
+.color-palette {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.color-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.color-swatch:hover {
+    transform: scale(1.15);
+}
+
+.color-swatch.active {
+    border-color: #ffffff;
+    box-shadow: 0 0 10px currentColor;
+    transform: scale(1.15);
+}
+
+.toggle-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 20px;
+}
+
+.switch input { opacity: 0; width: 0; height: 0; }
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background-color: rgba(255, 255, 255, 0.15);
+    transition: 0.3s;
+    border-radius: 20px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: #00f0ff;
+}
+
+input:checked + .slider:before {
+    transform: translateX(16px);
+}
+
+/* ================= TAB 5: TOOLS ================= */
+.tools-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.tool-tile {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 12px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+}
+
+.tool-tile:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(-2px);
+}
+
+.tool-icon-circle {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 2px;
+}
+
+.icon-amber { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
+.icon-cyan { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
+.icon-green { background: rgba(52, 211, 153, 0.2); color: #34d399; }
+.icon-pink { background: rgba(244, 114, 182, 0.2); color: #f472b6; }
+
+.tool-title { font-size: 12px; font-weight: 700; color: #ffffff; }
+.tool-desc { font-size: 9px; color: #64748b; }
+
+.island-info-footer {
+    margin-top: 12px;
+    text-align: center;
+    font-size: 10px;
+    color: #64748b;
+}
+
+.island-info-footer strong {
+    color: #00f0ff;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
