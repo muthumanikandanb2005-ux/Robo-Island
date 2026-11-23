@@ -102,30 +102,42 @@ roboAvatarWrapper.addEventListener('click', () => {
     }, 1200);
 });
 
-// Cursor Tracking Mode (Throttled for zero CPU lag)
+// Cursor Tracking Mode (Global Desktop + Local Fallback)
 let canTrackMouse = true;
-let mouseMoveScheduled = false;
-let cachedRect = null;
 
 chkFollowMouse.addEventListener('change', (e) => {
     canTrackMouse = e.target.checked;
     largeEyes.trackMouse = canTrackMouse;
+    miniEyes.trackMouse = canTrackMouse;
+    ipcRenderer.send('toggle-cursor-tracking', canTrackMouse);
 });
 
-window.addEventListener('mousemove', (e) => {
-    if (!canTrackMouse || !isExpanded) return;
-    if (mouseMoveScheduled) return;
-
-    mouseMoveScheduled = true;
-    requestAnimationFrame(() => {
-        if (!cachedRect) {
-            cachedRect = islandContainer.getBoundingClientRect();
-        }
-        const relX = ((e.clientX - cachedRect.left) / cachedRect.width) * 2 - 1;
-        const relY = ((e.clientY - cachedRect.top) / cachedRect.height) * 2 - 1;
+// Real-time desktop-wide cursor tracking from Electron main process
+ipcRenderer.on('global-cursor-move', (event, data) => {
+    if (!canTrackMouse || !data) return;
+    const { relX, relY } = data;
+    
+    // Collapsed mini eyes track mouse across entire desktop
+    miniEyes.lookAt(relX, relY);
+    
+    // Expanded large eyes track mouse across entire desktop
+    if (isExpanded) {
         largeEyes.lookAt(relX, relY);
-        mouseMoveScheduled = false;
-    });
+    }
+});
+
+// Local window hover fallback
+window.addEventListener('mousemove', (e) => {
+    if (!canTrackMouse) return;
+    const width = window.innerWidth || 1;
+    const height = window.innerHeight || 1;
+    const relX = (e.clientX / width) * 2 - 1;
+    const relY = (e.clientY / height) * 2 - 1;
+    
+    miniEyes.lookAt(relX, relY);
+    if (isExpanded) {
+        largeEyes.lookAt(relX, relY);
+    }
 });
 
 // ==========================================
@@ -149,9 +161,9 @@ btnPin.addEventListener('click', (e) => {
 
 function expandIsland() {
     isExpanded = true;
-    cachedRect = null;
     islandContainer.classList.remove('collapsed');
     islandContainer.classList.add('expanded');
+    miniEyes.pause();   // Pause mini eyes loop when expanded to save CPU
     largeEyes.resume(); // Start large eyes loop
     if (isPlaying) startAudioWave();
     ipcRenderer.send('expand-island');
@@ -159,11 +171,11 @@ function expandIsland() {
 
 function collapseIsland() {
     isExpanded = false;
-    cachedRect = null;
     islandContainer.classList.remove('expanded');
     islandContainer.classList.add('collapsed');
-    largeEyes.pause(); // Pause large eyes loop to save CPU & battery!
-    stopAudioWave();   // Pause wave loop
+    miniEyes.resume();  // Resume mini eyes loop
+    largeEyes.pause();  // Pause large eyes loop to save CPU & battery!
+    stopAudioWave();    // Pause wave loop
     ipcRenderer.send('collapse-island');
 }
 
@@ -176,11 +188,13 @@ ipcRenderer.on('island-state-changed', (event, payload) => {
     if (expanded) {
         islandContainer.classList.remove('collapsed');
         islandContainer.classList.add('expanded');
+        miniEyes.pause();
         largeEyes.resume();
         if (isPlaying) startAudioWave();
     } else {
         islandContainer.classList.remove('expanded');
         islandContainer.classList.add('collapsed');
+        miniEyes.resume();
         largeEyes.pause();
         stopAudioWave();
     }
@@ -503,3 +517,6 @@ toolSnip.addEventListener('click', () => ipcRenderer.send('system-action', { act
 toolTaskmgr.addEventListener('click', () => ipcRenderer.send('system-action', { action: 'taskmgr' }));
 toolSettings.addEventListener('click', () => ipcRenderer.send('system-action', { action: 'settings' }));
 toolLock.addEventListener('click', () => ipcRenderer.send('system-action', { action: 'lock' }));
+
+// Initialize global desktop cursor tracking
+ipcRenderer.send('toggle-cursor-tracking', true);

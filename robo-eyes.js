@@ -15,6 +15,8 @@ class RoboEyes {
         this.targetLookY = 0;
         this.currentLookX = 0;
         this.currentLookY = 0;
+        this.lastLookAtTime = 0;
+        this.trackMouse = true;
 
         // Blinking
         this.blinkProgress = 0;
@@ -30,13 +32,12 @@ class RoboEyes {
         this.isMusicPlaying = false;
         this.pulsePhase = 0;
         this.isHighLoad = false;
-        this.trackMouse = true;
 
-        // Geometry
-        this.eyeWidth = this.options.mini ? 14 : 36;
-        this.eyeHeight = this.options.mini ? 16 : 44;
-        this.eyeRadius = this.options.mini ? 5 : 12;
-        this.eyeSpacing = this.options.mini ? 8 : 18;
+        // Geometry (Proportionate for 80x26 mini and 110x40 large canvas)
+        this.eyeWidth = this.options.mini ? 14 : 26;
+        this.eyeHeight = this.options.mini ? 16 : 26;
+        this.eyeRadius = this.options.mini ? 5 : 8;
+        this.eyeSpacing = this.options.mini ? 8 : 14;
 
         this.animFrameId = null;
         this.isRunning = false;
@@ -67,6 +68,7 @@ class RoboEyes {
     lookAt(x, y) {
         this.targetLookX = Math.max(-1, Math.min(1, x));
         this.targetLookY = Math.max(-1, Math.min(1, y));
+        this.lastLookAtTime = Date.now();
     }
 
     triggerBlink() {
@@ -86,21 +88,25 @@ class RoboEyes {
     update() {
         const now = Date.now();
 
-        // 1. Organic Saccades
-        if (now - this.lastSaccadeTime > this.nextSaccadeInterval) {
-            this.lastSaccadeTime = now;
-            this.nextSaccadeInterval = 1500 + Math.random() * 2500;
-            
-            const rand = Math.random();
-            if (rand < 0.45) {
-                this.targetLookX = 0;
-                this.targetLookY = 0;
-            } else if (rand < 0.7) {
-                this.targetLookX = (Math.random() - 0.5) * 1.2;
-                this.targetLookY = (Math.random() - 0.5) * 0.4;
-            } else {
-                this.targetLookX = (Math.random() > 0.5 ? 0.6 : -0.6);
-                this.targetLookY = -0.2;
+        // 1. Organic Saccades ONLY if not actively tracking mouse (idle for > 2.5s)
+        const isTrackingActive = this.trackMouse && (now - this.lastLookAtTime < 2500);
+
+        if (!isTrackingActive) {
+            if (now - this.lastSaccadeTime > this.nextSaccadeInterval) {
+                this.lastSaccadeTime = now;
+                this.nextSaccadeInterval = 1600 + Math.random() * 2500;
+                
+                const rand = Math.random();
+                if (rand < 0.45) {
+                    this.targetLookX = 0;
+                    this.targetLookY = 0;
+                } else if (rand < 0.7) {
+                    this.targetLookX = (Math.random() - 0.5) * 1.0;
+                    this.targetLookY = (Math.random() - 0.5) * 0.4;
+                } else {
+                    this.targetLookX = (Math.random() > 0.5 ? 0.6 : -0.6);
+                    this.targetLookY = -0.2;
+                }
             }
         }
 
@@ -120,9 +126,9 @@ class RoboEyes {
             }
         }
 
-        // 3. Ultra-smooth exponential interpolation (smooth spring feel)
-        this.currentLookX += (this.targetLookX - this.currentLookX) * 0.18;
-        this.currentLookY += (this.targetLookY - this.currentLookY) * 0.18;
+        // 3. Ultra-smooth exponential spring interpolation
+        this.currentLookX += (this.targetLookX - this.currentLookX) * 0.22;
+        this.currentLookY += (this.targetLookY - this.currentLookY) * 0.22;
 
         // 4. Music pulse
         if (this.isMusicPlaying) {
@@ -140,9 +146,10 @@ class RoboEyes {
         const centerX = width / 2;
         const centerY = height / 2;
 
-        const maxLookOffset = this.options.mini ? 3 : 7;
-        const lookOffsetX = this.currentLookX * maxLookOffset;
-        const lookOffsetY = this.currentLookY * (maxLookOffset * 0.5);
+        const maxLookOffsetX = this.options.mini ? 6 : 9;
+        const maxLookOffsetY = this.options.mini ? 4 : 5;
+        const lookOffsetX = this.currentLookX * maxLookOffsetX;
+        const lookOffsetY = this.currentLookY * maxLookOffsetY;
 
         const pulse = this.isMusicPlaying 
             ? Math.sin(this.pulsePhase) * (this.options.mini ? 0.8 : 2)
@@ -228,13 +235,13 @@ class RoboEyes {
             ctx.roundRect(rx, ry, w, effectiveHeight, actualRadius);
             ctx.fill();
 
-            // Crisp pupil reflection glint
+            // Crisp pupil reflection glint with 3D parallax tracking
             if (effectiveHeight > 7) {
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
                 ctx.beginPath();
-                const glintSize = this.options.mini ? 2 : 4.5;
-                const glintOffsetX = (isLeft ? -w * 0.18 : -w * 0.15) + (this.currentLookX * 1.5);
-                const glintOffsetY = -effectiveHeight * 0.22 + (this.currentLookY * 1.5);
+                const glintSize = this.options.mini ? 2 : 3.5;
+                const glintOffsetX = (isLeft ? -w * 0.16 : -w * 0.12) + (this.currentLookX * (this.options.mini ? 2.5 : 4));
+                const glintOffsetY = -effectiveHeight * 0.2 + (this.currentLookY * (this.options.mini ? 2.5 : 4));
                 ctx.arc(glintOffsetX, glintOffsetY, glintSize, 0, Math.PI * 2);
                 ctx.fill();
             }
