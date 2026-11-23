@@ -62,7 +62,9 @@ body {
 #mini-eyes-canvas {
     display: block;
     filter: drop-shadow(0 0 6px rgba(0, 240, 255, 0.6));
-    transition: transform 0.2s ease;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transform: translateZ(0);
+    will-change: transform;
 }
 
 .island.collapsed:hover #mini-eyes-canvas {

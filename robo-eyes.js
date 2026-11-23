@@ -1,13 +1,10 @@
-// Robo Eyes Animation Engine
-// Procedural vector animated robotic eyes with organic saccades, blinks, expressions and cursor tracking
-
+// Robo Eyes Animation Engine - Ultra-Smooth & Battery-Efficient
 class RoboEyes {
     constructor(canvas, options = {}) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
         this.options = Object.assign({
             primaryColor: '#00f0ff',
-            glowColor: 'rgba(0, 240, 255, 0.45)',
             accentColor: '#ffffff',
             mini: false
         }, options);
@@ -27,27 +24,22 @@ class RoboEyes {
 
         // Organic saccades
         this.lastSaccadeTime = Date.now();
-        this.nextSaccadeInterval = 1200 + Math.random() * 2500;
+        this.nextSaccadeInterval = 1400 + Math.random() * 2500;
 
         // Music pulse
         this.isMusicPlaying = false;
         this.pulsePhase = 0;
-
-        // High load alert
         this.isHighLoad = false;
-
-        // Tracking mouse
         this.trackMouse = true;
-        this.mouseX = 0;
-        this.mouseY = 0;
 
-        // Ultra-compact mini eyes
+        // Geometry
         this.eyeWidth = this.options.mini ? 14 : 36;
         this.eyeHeight = this.options.mini ? 16 : 44;
         this.eyeRadius = this.options.mini ? 5 : 12;
         this.eyeSpacing = this.options.mini ? 8 : 18;
 
         this.animFrameId = null;
+        this.isRunning = false;
         this.start();
     }
 
@@ -57,7 +49,6 @@ class RoboEyes {
 
     setColor(colorHex) {
         this.options.primaryColor = colorHex;
-        this.options.glowColor = colorHex + '77';
     }
 
     setMusicPlaying(isPlaying) {
@@ -96,22 +87,20 @@ class RoboEyes {
         const now = Date.now();
 
         // 1. Organic Saccades
-        if (!this.trackMouse || (this.mouseX === 0 && this.mouseY === 0)) {
-            if (now - this.lastSaccadeTime > this.nextSaccadeInterval) {
-                this.lastSaccadeTime = now;
-                this.nextSaccadeInterval = 1200 + Math.random() * 2500;
-                
-                const rand = Math.random();
-                if (rand < 0.45) {
-                    this.targetLookX = 0;
-                    this.targetLookY = 0;
-                } else if (rand < 0.7) {
-                    this.targetLookX = (Math.random() - 0.5) * 1.3;
-                    this.targetLookY = (Math.random() - 0.5) * 0.5;
-                } else {
-                    this.targetLookX = (Math.random() > 0.5 ? 0.6 : -0.6);
-                    this.targetLookY = -0.3;
-                }
+        if (now - this.lastSaccadeTime > this.nextSaccadeInterval) {
+            this.lastSaccadeTime = now;
+            this.nextSaccadeInterval = 1500 + Math.random() * 2500;
+            
+            const rand = Math.random();
+            if (rand < 0.45) {
+                this.targetLookX = 0;
+                this.targetLookY = 0;
+            } else if (rand < 0.7) {
+                this.targetLookX = (Math.random() - 0.5) * 1.2;
+                this.targetLookY = (Math.random() - 0.5) * 0.4;
+            } else {
+                this.targetLookX = (Math.random() > 0.5 ? 0.6 : -0.6);
+                this.targetLookY = -0.2;
             }
         }
 
@@ -124,22 +113,20 @@ class RoboEyes {
                 this.nextBlinkInterval = 2500 + Math.random() * 3500;
             }
         } else {
-            this.blinkProgress += 0.18;
+            this.blinkProgress += 0.16;
             if (this.blinkProgress >= 1) {
                 this.isBlinking = false;
                 this.blinkProgress = 0;
             }
         }
 
-        // 3. Smooth interpolation
-        this.currentLookX += (this.targetLookX - this.currentLookX) * 0.2;
-        this.currentLookY += (this.targetLookY - this.currentLookY) * 0.2;
+        // 3. Ultra-smooth exponential interpolation (smooth spring feel)
+        this.currentLookX += (this.targetLookX - this.currentLookX) * 0.18;
+        this.currentLookY += (this.targetLookY - this.currentLookY) * 0.18;
 
         // 4. Music pulse
         if (this.isMusicPlaying) {
-            this.pulsePhase += 0.12;
-        } else {
-            this.pulsePhase += 0.03;
+            this.pulsePhase += 0.1;
         }
     }
 
@@ -153,13 +140,13 @@ class RoboEyes {
         const centerX = width / 2;
         const centerY = height / 2;
 
-        const maxLookOffset = this.options.mini ? 3 : 8;
+        const maxLookOffset = this.options.mini ? 3 : 7;
         const lookOffsetX = this.currentLookX * maxLookOffset;
-        const lookOffsetY = this.currentLookY * (maxLookOffset * 0.6);
+        const lookOffsetY = this.currentLookY * (maxLookOffset * 0.5);
 
         const pulse = this.isMusicPlaying 
             ? Math.sin(this.pulsePhase) * (this.options.mini ? 0.8 : 2)
-            : Math.sin(this.pulsePhase) * (this.options.mini ? 0.2 : 0.6);
+            : 0;
 
         const leftEyeCenterX = centerX - (this.eyeWidth / 2) - (this.eyeSpacing / 2) + lookOffsetX;
         const rightEyeCenterX = centerX + (this.eyeWidth / 2) + (this.eyeSpacing / 2) + lookOffsetX;
@@ -171,9 +158,9 @@ class RoboEyes {
 
     drawSingleEye(x, y, isLeft, pulse) {
         const ctx = this.ctx;
-        let w = this.eyeWidth + pulse;
-        let h = this.eyeHeight + pulse;
-        let r = this.eyeRadius;
+        const w = this.eyeWidth + pulse;
+        const h = this.eyeHeight + pulse;
+        const r = this.eyeRadius;
 
         let blinkScale = 1;
         if (this.isBlinking) {
@@ -182,9 +169,7 @@ class RoboEyes {
 
         if (this.mood === 'wink' && isLeft) {
             blinkScale = 0.08;
-        }
-
-        if (this.mood === 'sleepy') {
+        } else if (this.mood === 'sleepy') {
             blinkScale *= 0.45;
         }
 
@@ -192,9 +177,6 @@ class RoboEyes {
 
         ctx.save();
         ctx.translate(x, y);
-
-        ctx.shadowColor = this.options.glowColor;
-        ctx.shadowBlur = this.options.mini ? 5 : 12;
 
         if (this.mood === 'happy') {
             ctx.beginPath();
@@ -212,7 +194,6 @@ class RoboEyes {
 
         } else if (this.mood === 'love') {
             ctx.fillStyle = '#ff2a6d';
-            ctx.shadowColor = 'rgba(255, 42, 109, 0.6)';
             ctx.beginPath();
             const topCurveHeight = effectiveHeight * 0.3;
             ctx.moveTo(0, topCurveHeight);
@@ -247,7 +228,7 @@ class RoboEyes {
             ctx.roundRect(rx, ry, w, effectiveHeight, actualRadius);
             ctx.fill();
 
-            // Pupil highlight
+            // Crisp pupil reflection glint
             if (effectiveHeight > 7) {
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
                 ctx.beginPath();
@@ -263,7 +244,10 @@ class RoboEyes {
     }
 
     start() {
+        if (this.isRunning) return;
+        this.isRunning = true;
         const loop = () => {
+            if (!this.isRunning) return;
             this.update();
             this.draw();
             this.animFrameId = requestAnimationFrame(loop);
@@ -271,10 +255,20 @@ class RoboEyes {
         this.animFrameId = requestAnimationFrame(loop);
     }
 
-    stop() {
+    pause() {
+        this.isRunning = false;
         if (this.animFrameId) {
             cancelAnimationFrame(this.animFrameId);
+            this.animFrameId = null;
         }
+    }
+
+    resume() {
+        this.start();
+    }
+
+    stop() {
+        this.pause();
     }
 }
 

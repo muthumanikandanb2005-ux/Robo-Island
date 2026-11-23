@@ -2,6 +2,11 @@ const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, globalShor
 const path = require('path');
 const fs = require('fs');
 
+// Power efficiency & Hardware Acceleration flags
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('disable-software-rasterizer');
+
 process.on('uncaughtException', (err) => {
     try { fs.appendFileSync(path.join(__dirname, 'crash.log'), `[${new Date().toISOString()}] Uncaught: ${err.stack || err}\n`); } catch(e){}
 });
@@ -24,9 +29,13 @@ const SIZES = {
 };
 
 function getCenteredX(width) {
-    const primaryDisplay = screen.getPrimaryDisplay();
-    const { width: screenWidth } = primaryDisplay.workAreaSize;
-    return Math.round((screenWidth - width) / 2);
+    try {
+        const primaryDisplay = screen.getPrimaryDisplay();
+        const { width: screenWidth } = primaryDisplay.workAreaSize;
+        return Math.round((screenWidth - width) / 2);
+    } catch (e) {
+        return 600;
+    }
 }
 
 app.name = 'Robo Island';
@@ -34,18 +43,15 @@ if (process.platform === 'win32') {
     app.setAppUserModelId('RoboIsland.App');
 }
 
-// Auto-start on Windows laptop startup
-try {
-    app.setLoginItemSettings({
-        openAtLogin: true,
-        openAsHidden: false,
-        path: process.execPath
-    });
-} catch (e) {
-    console.error('Login item setting error:', e);
-}
-
 function createWindow() {
+    // Configure auto-start safely inside whenReady
+    try {
+        app.setLoginItemSettings({
+            openAtLogin: true,
+            path: process.execPath
+        });
+    } catch (e) {}
+
     const x = getCenteredX(SIZES.collapsed.width);
     
     mainWindow = new BrowserWindow({
@@ -58,19 +64,25 @@ function createWindow() {
         transparent: true,
         frame: false,
         alwaysOnTop: true,
-        skipTaskbar: true, // NEVER show in taskbar!
+        skipTaskbar: true, // Never show in taskbar
         resizable: false,
         hasShadow: false,
         backgroundColor: '#00000000',
         webPreferences: {
             nodeIntegration: true,
-            contextIsolation: false
+            contextIsolation: false,
+            backgroundThrottling: false
         }
     });
 
     mainWindow.loadFile('index.html');
-    mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    mainWindow.setAlwaysOnTop(true, 'screen-saver');
+    
+    // Windows safe always on top (no invalid 'screen-saver' level)
+    try {
+        mainWindow.setAlwaysOnTop(true, 'floating');
+    } catch (e) {
+        mainWindow.setAlwaysOnTop(true);
+    }
 
     // Register global toggle hotkey: Alt+I or Ctrl+Shift+Space
     try {
@@ -100,6 +112,8 @@ function resizeIsland(expanded) {
     isExpanded = expanded;
     const targetSize = expanded ? SIZES.expanded : SIZES.collapsed;
     const targetX = getCenteredX(targetSize.width);
+
+    systemService.setWindowState(expanded);
 
     mainWindow.setBounds({
         x: targetX,
@@ -147,7 +161,7 @@ function createTray() {
                 type: 'checkbox', 
                 checked: true, 
                 click: (item) => {
-                    app.setLoginItemSettings({ openAtLogin: item.checked });
+                    try { app.setLoginItemSettings({ openAtLogin: item.checked }); } catch(e){}
                 } 
             },
             { type: 'separator' },
@@ -164,7 +178,7 @@ function createTray() {
     }
 }
 
-// IPC Handlers
+// Safe IPC Handlers (Guarded against undefined payload crashes)
 ipcMain.on('expand-island', () => {
     resizeIsland(true);
 });
@@ -180,7 +194,13 @@ ipcMain.on('toggle-pin', (event, val) => {
     event.reply('pin-status', isPinned);
 });
 
-ipcMain.on('media-action', (event, { action, param }) => {
+ipcMain.on('tab-changed', (event, tabName) => {
+    if (tabName) systemService.setWindowState(isExpanded, tabName);
+});
+
+ipcMain.on('media-action', (event, payload) => {
+    if (!payload) return;
+    const { action, param } = payload;
     switch (action) {
         case 'playpause': mediaService.playPause(); break;
         case 'next': mediaService.next(); break;
@@ -193,7 +213,9 @@ ipcMain.on('media-action', (event, { action, param }) => {
     }
 });
 
-ipcMain.on('system-action', (event, { action, pid }) => {
+ipcMain.on('system-action', (event, payload) => {
+    if (!payload) return;
+    const { action, pid } = payload;
     switch (action) {
         case 'kill': if (pid) systemService.killProcess(pid); break;
         case 'taskmgr': systemService.openTaskManager(); break;
@@ -214,7 +236,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
-    globalShortcut.unregisterAll();
+    try { globalShortcut.unregisterAll(); } catch(e){}
     mediaService.destroy();
     systemService.stopPolling();
 });

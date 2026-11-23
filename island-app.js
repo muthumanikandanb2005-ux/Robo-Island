@@ -1,4 +1,4 @@
-// Robo Island - Frontend Controller & Event Orchestrator
+// Robo Island - Ultra-Smooth & Battery-Efficient Controller
 const { ipcRenderer } = require('electron');
 
 // DOM Elements
@@ -70,19 +70,14 @@ const tabPanels = document.querySelectorAll('.tab-panel');
 // Internal State
 let isExpanded = false;
 let isPinned = false;
-let currentMediaState = {
-    title: '',
-    artist: '',
-    status: 'Stopped',
-    position: 0,
-    duration: 0
-};
+let currentMediaState = null;
 let localPlayPosition = 0;
 let localDuration = 0;
 let isPlaying = false;
+let waveAnimFrameId = null;
 
 // ==========================================
-// 1. INITIALIZE ULTRA-COMPACT ROBO EYES
+// 1. INITIALIZE ROBO EYES (BATTERY-OPTIMIZED)
 // ==========================================
 const miniEyes = new RoboEyes(miniCanvas, {
     mini: true,
@@ -94,6 +89,9 @@ const largeEyes = new RoboEyes(largeCanvas, {
     primaryColor: '#00f0ff'
 });
 
+// Since we start collapsed, pause large eyes immediately to save CPU/battery!
+largeEyes.pause();
+
 // Click large eyes to trigger cute wink
 roboAvatarWrapper.addEventListener('click', () => {
     largeEyes.triggerWink();
@@ -104,19 +102,30 @@ roboAvatarWrapper.addEventListener('click', () => {
     }, 1200);
 });
 
-// Cursor Tracking Mode
+// Cursor Tracking Mode (Throttled for zero CPU lag)
 let canTrackMouse = true;
+let mouseMoveScheduled = false;
+let cachedRect = null;
+
 chkFollowMouse.addEventListener('change', (e) => {
     canTrackMouse = e.target.checked;
     largeEyes.trackMouse = canTrackMouse;
 });
 
 window.addEventListener('mousemove', (e) => {
-    if (!canTrackMouse) return;
-    const rect = islandContainer.getBoundingClientRect();
-    const relX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    const relY = ((e.clientY - rect.top) / rect.height) * 2 - 1;
-    largeEyes.lookAt(relX, relY);
+    if (!canTrackMouse || !isExpanded) return;
+    if (mouseMoveScheduled) return;
+
+    mouseMoveScheduled = true;
+    requestAnimationFrame(() => {
+        if (!cachedRect) {
+            cachedRect = islandContainer.getBoundingClientRect();
+        }
+        const relX = ((e.clientX - cachedRect.left) / cachedRect.width) * 2 - 1;
+        const relY = ((e.clientY - cachedRect.top) / cachedRect.height) * 2 - 1;
+        largeEyes.lookAt(relX, relY);
+        mouseMoveScheduled = false;
+    });
 });
 
 // ==========================================
@@ -140,33 +149,45 @@ btnPin.addEventListener('click', (e) => {
 
 function expandIsland() {
     isExpanded = true;
+    cachedRect = null;
     islandContainer.classList.remove('collapsed');
     islandContainer.classList.add('expanded');
+    largeEyes.resume(); // Start large eyes loop
+    if (isPlaying) startAudioWave();
     ipcRenderer.send('expand-island');
 }
 
 function collapseIsland() {
     isExpanded = false;
+    cachedRect = null;
     islandContainer.classList.remove('expanded');
     islandContainer.classList.add('collapsed');
+    largeEyes.pause(); // Pause large eyes loop to save CPU & battery!
+    stopAudioWave();   // Pause wave loop
     ipcRenderer.send('collapse-island');
 }
 
-ipcRenderer.on('island-state-changed', (event, { expanded, pinned }) => {
+ipcRenderer.on('island-state-changed', (event, payload) => {
+    if (!payload) return;
+    const { expanded, pinned } = payload;
     isExpanded = expanded;
     isPinned = pinned;
     btnPin.classList.toggle('active', pinned);
     if (expanded) {
         islandContainer.classList.remove('collapsed');
         islandContainer.classList.add('expanded');
+        largeEyes.resume();
+        if (isPlaying) startAudioWave();
     } else {
         islandContainer.classList.remove('expanded');
         islandContainer.classList.add('collapsed');
+        largeEyes.pause();
+        stopAudioWave();
     }
 });
 
 // ==========================================
-// 3. TAB NAVIGATION
+// 3. TAB NAVIGATION (ON-DEMAND STATS)
 // ==========================================
 navTabs.forEach(tab => {
     tab.addEventListener('click', () => {
@@ -177,6 +198,9 @@ navTabs.forEach(tab => {
         const targetId = tab.dataset.tab;
         const targetPanel = document.getElementById(targetId);
         if (targetPanel) targetPanel.classList.add('active');
+
+        // Notify main process to only fetch stats on-demand
+        ipcRenderer.send('tab-changed', targetId);
     });
 });
 
@@ -197,7 +221,7 @@ function updateProgressDisplay() {
     timelineProgress.style.width = `${percent}%`;
 }
 
-// Live 1-second ticker for seamless progressive bar advancement
+// 1-second ticker: advances progress bar locally without heavy polling
 setInterval(() => {
     if (isPlaying && localDuration > 0) {
         localPlayPosition = Math.min(localDuration, localPlayPosition + 1);
@@ -227,7 +251,7 @@ ipcRenderer.on('media-update', (event, data) => {
 
 function renderMedia(data) {
     isPlaying = (data.status === 'Playing');
-    const hasMedia = (data.success && data.title);
+    const hasMedia = Boolean(data.success && data.title);
 
     miniEyes.setMusicPlaying(isPlaying);
     largeEyes.setMusicPlaying(isPlaying);
@@ -238,12 +262,14 @@ function renderMedia(data) {
         pauseIcon.style.display = 'block';
         mediaStatusBadge.textContent = 'Playing';
         mediaStatusBadge.classList.add('playing');
+        if (isExpanded) startAudioWave();
     } else {
         vinylDisc.classList.remove('spinning');
         playIcon.style.display = 'block';
         pauseIcon.style.display = 'none';
         mediaStatusBadge.textContent = hasMedia ? 'Paused' : 'Idle';
         mediaStatusBadge.classList.remove('playing');
+        stopAudioWave();
     }
 
     if (hasMedia) {
@@ -275,10 +301,9 @@ function renderMedia(data) {
     }
 }
 
-// Fixed & Instant Media Buttons
+// Media Buttons
 btnPlayPause.addEventListener('click', (e) => {
     e.stopPropagation();
-    // Instant UI flip for responsiveness
     isPlaying = !isPlaying;
     if (isPlaying) {
         vinylDisc.classList.add('spinning');
@@ -286,12 +311,14 @@ btnPlayPause.addEventListener('click', (e) => {
         pauseIcon.style.display = 'block';
         mediaStatusBadge.textContent = 'Playing';
         mediaStatusBadge.classList.add('playing');
+        startAudioWave();
     } else {
         vinylDisc.classList.remove('spinning');
         playIcon.style.display = 'block';
         pauseIcon.style.display = 'none';
         mediaStatusBadge.textContent = 'Paused';
         mediaStatusBadge.classList.remove('playing');
+        stopAudioWave();
     }
     largeEyes.triggerBlink();
     ipcRenderer.send('media-action', { action: 'playpause' });
@@ -300,14 +327,14 @@ btnPlayPause.addEventListener('click', (e) => {
 btnNext.addEventListener('click', (e) => {
     e.stopPropagation();
     largeEyes.lookAt(0.9, 0);
-    setTimeout(() => largeEyes.lookAt(0, 0), 500);
+    setTimeout(() => largeEyes.lookAt(0, 0), 400);
     ipcRenderer.send('media-action', { action: 'next' });
 });
 
 btnPrev.addEventListener('click', (e) => {
     e.stopPropagation();
     largeEyes.lookAt(-0.9, 0);
-    setTimeout(() => largeEyes.lookAt(0, 0), 500);
+    setTimeout(() => largeEyes.lookAt(0, 0), 400);
     ipcRenderer.send('media-action', { action: 'prev' });
 });
 
@@ -315,40 +342,48 @@ btnMute.addEventListener('click', () => ipcRenderer.send('media-action', { actio
 btnVolUp.addEventListener('click', () => ipcRenderer.send('media-action', { action: 'volup' }));
 btnVolDown.addEventListener('click', () => ipcRenderer.send('media-action', { action: 'voldown' }));
 
-// Audio Wave Animation
+// Audio Wave (Runs ONLY when playing and expanded)
 const waveCtx = mediaWaveCanvas.getContext('2d');
 const waveBars = 8;
-const barHeights = new Array(waveBars).fill(3);
+const barHeights = new Array(waveBars).fill(2);
 
-function animateAudioWave() {
-    waveCtx.clearRect(0, 0, mediaWaveCanvas.width, mediaWaveCanvas.height);
-    const barWidth = 6;
-    const barGap = 4;
-    const startX = (mediaWaveCanvas.width - (waveBars * (barWidth + barGap))) / 2;
-
-    for (let i = 0; i < waveBars; i++) {
-        if (isPlaying) {
-            const target = 3 + Math.random() * 20;
-            barHeights[i] += (target - barHeights[i]) * 0.25;
-        } else {
-            barHeights[i] += (2 - barHeights[i]) * 0.1;
+function startAudioWave() {
+    if (waveAnimFrameId) return;
+    const animateWave = () => {
+        if (!isPlaying || !isExpanded) {
+            waveAnimFrameId = null;
+            return;
         }
 
-        const h = Math.max(2, barHeights[i]);
-        const x = startX + i * (barWidth + barGap);
-        const y = mediaWaveCanvas.height - h;
+        waveCtx.clearRect(0, 0, mediaWaveCanvas.width, mediaWaveCanvas.height);
+        const barWidth = 6;
+        const barGap = 4;
+        const startX = (mediaWaveCanvas.width - (waveBars * (barWidth + barGap))) / 2;
 
-        const grad = waveCtx.createLinearGradient(0, y, 0, y + h);
-        grad.addColorStop(0, '#00f0ff');
-        grad.addColorStop(1, '#3b82f6');
-        waveCtx.fillStyle = grad;
-        waveCtx.beginPath();
-        waveCtx.roundRect(x, y, barWidth, h, 2.5);
-        waveCtx.fill();
-    }
-    requestAnimationFrame(animateAudioWave);
+        for (let i = 0; i < waveBars; i++) {
+            const target = 2 + Math.random() * 18;
+            barHeights[i] += (target - barHeights[i]) * 0.25;
+            const h = Math.max(2, barHeights[i]);
+            const x = startX + i * (barWidth + barGap);
+            const y = mediaWaveCanvas.height - h;
+
+            waveCtx.fillStyle = '#00f0ff';
+            waveCtx.beginPath();
+            waveCtx.roundRect(x, y, barWidth, h, 2);
+            waveCtx.fill();
+        }
+        waveAnimFrameId = requestAnimationFrame(animateWave);
+    };
+    waveAnimFrameId = requestAnimationFrame(animateWave);
 }
-requestAnimationFrame(animateAudioWave);
+
+function stopAudioWave() {
+    if (waveAnimFrameId) {
+        cancelAnimationFrame(waveAnimFrameId);
+        waveAnimFrameId = null;
+    }
+    waveCtx.clearRect(0, 0, mediaWaveCanvas.width, mediaWaveCanvas.height);
+}
 
 // ==========================================
 // 5. HARDWARE MONITORING
@@ -390,7 +425,7 @@ ipcRenderer.on('system-stats', (event, stats) => {
         cpuBarFill.style.width = `${stats.cpu.percent}%`;
     }
 
-    // Disks
+    // Disks (if present)
     if (stats.disks && stats.disks.length > 0) {
         disksContainer.innerHTML = stats.disks.map(d => {
             const colorClass = d.percent > 85 ? 'fill-red' : (d.percent > 70 ? 'fill-amber' : 'fill-cyan');
@@ -408,10 +443,10 @@ ipcRenderer.on('system-stats', (event, stats) => {
         }).join('');
     }
 
-    // Background apps
-    if (stats.processes) {
+    // Background apps (if present)
+    if (stats.processes && stats.processes.list) {
         tabAppsCount.textContent = stats.processes.total || 0;
-        if (stats.processes.list && stats.processes.list.length > 0) {
+        if (stats.processes.list.length > 0) {
             processList.innerHTML = stats.processes.list.map(p => `
                 <div class="proc-item">
                     <div class="proc-left">
