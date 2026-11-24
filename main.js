@@ -23,6 +23,7 @@ let isPinned = false;
 let isExpanded = false;
 let isHidden = false;
 let isAutoHideOnVideo = false;
+let isAutoHideBrowsing = false;
 
 // Geometry configuration: Ultra-compact, non-disturbing tiny eyes
 const SIZES = {
@@ -130,22 +131,37 @@ function createWindow() {
         globalShortcut.register('Alt+,', () => mediaService.previous());
     } catch (e) {}
 
-    // Wire Media Service events with Video Auto-Hide
+    // Wire Media Service & Active Window events with Smart Auto-Hide
     mediaService.on('update', (mediaData) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('media-update', mediaData);
 
-            // Auto-hide island while video is actively playing (if enabled)
-            if (isAutoHideOnVideo && !isExpanded) {
-                const isPlaying = (mediaData.status === 'Playing');
-                const src = (mediaData.source || '').toLowerCase();
-                const isVideo = src.includes('chrome') || src.includes('brave') || 
-                                src.includes('msedge') || src.includes('firefox') || 
-                                src.includes('youtube') || src.includes('vlc') || src.includes('netflix');
-                if (isPlaying && isVideo && !isHidden) {
-                    hideIsland();
-                } else if (!isPlaying && isHidden) {
-                    showIsland();
+            const isDesktop = (mediaData.isDesktop === true);
+            const isBrowser = (mediaData.isBrowser === true);
+            const isYouTube = (mediaData.isYouTube === true) || 
+                              ((mediaData.title || '').toLowerCase().includes('youtube')) ||
+                              ((mediaData.artist || '').toLowerCase().includes('youtube'));
+            const isPlaying = (mediaData.status === 'Playing');
+
+            // CRITICAL USER RULES:
+            // 1. In Home Screen (Desktop): NEVER HIDE! Always keep robot eyes visible!
+            // 2. In YouTube or while browsing: Hide if auto-hide is enabled.
+            // 3. When returning to Desktop: Instantly unhide!
+            if (!isExpanded) {
+                if (isDesktop) {
+                    // Home Screen: MUST NOT HIDE!
+                    if (isHidden) {
+                        showIsland();
+                    }
+                } else if (isAutoHideOnVideo || isAutoHideBrowsing) {
+                    const shouldHideInBrowser = isAutoHideBrowsing && isBrowser;
+                    const shouldHideInVideo = isAutoHideOnVideo && (isYouTube || isBrowser) && isPlaying;
+
+                    if ((shouldHideInBrowser || shouldHideInVideo) && !isHidden) {
+                        hideIsland();
+                    } else if (!shouldHideInBrowser && !shouldHideInVideo && isHidden) {
+                        showIsland();
+                    }
                 }
             }
         }
@@ -402,6 +418,16 @@ ipcMain.on('hide-island', () => hideIsland());
 ipcMain.on('show-island', () => showIsland());
 ipcMain.on('set-autohide-video', (event, val) => {
     isAutoHideOnVideo = (val === true);
+    if (!isAutoHideOnVideo && !isAutoHideBrowsing && isHidden) {
+        showIsland();
+    }
+});
+
+ipcMain.on('set-autohide-browsing', (event, val) => {
+    isAutoHideBrowsing = (val === true);
+    if (!isAutoHideBrowsing && !isAutoHideOnVideo && isHidden) {
+        showIsland();
+    }
 });
 
 ipcMain.on('show-mini-context-menu', (event) => {

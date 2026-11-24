@@ -578,37 +578,21 @@ function showToast(text, duration = 1800) {
     }, duration);
 }
 
-// Auto-Hide During Video Playback
+// Auto-Hide During Video Playback (YouTube / Web video)
 if (chkAutoHideVideo) {
     chkAutoHideVideo.addEventListener('change', (e) => {
         ipcRenderer.send('set-autohide-video', e.target.checked);
-        showToast(e.target.checked ? '✓ Video Auto-Hide Active' : 'Video Auto-Hide Disabled');
+        showToast(e.target.checked ? '✓ Video Auto-Hide Active (YouTube / Web)' : 'Video Auto-Hide Disabled');
     });
 }
 
-// Auto-Hide On Idle (Browsing Mode)
-let isAutoHideIdle = false;
-let idleTimer = null;
-
-function resetIdleTimer() {
-    if (idleTimer) clearTimeout(idleTimer);
-    if (!isAutoHideIdle || isExpanded) return;
-    idleTimer = setTimeout(() => {
-        if (isAutoHideIdle && !isExpanded) {
-            ipcRenderer.send('hide-island');
-        }
-    }, 5000);
-}
-
+// Auto-Hide While Browsing (Never hides on Home Screen)
 if (chkAutoHideIdle) {
     chkAutoHideIdle.addEventListener('change', (e) => {
-        isAutoHideIdle = e.target.checked;
-        showToast(e.target.checked ? '✓ Auto-Hide on Idle Active (5s)' : 'Idle Auto-Hide Disabled');
-        if (isAutoHideIdle) resetIdleTimer();
+        ipcRenderer.send('set-autohide-browsing', e.target.checked);
+        showToast(e.target.checked ? '✓ Auto-Hide in Browsers Active' : 'Browser Auto-Hide Disabled');
     });
 }
-
-window.addEventListener('mousemove', () => resetIdleTimer());
 
 // Visibility State Changes from Main (Hotkeys Alt+H / Edge Peek)
 ipcRenderer.on('island-visibility-changed', (event, visible) => {
@@ -616,8 +600,6 @@ ipcRenderer.on('island-visibility-changed', (event, visible) => {
         islandContainer.classList.remove('hiding');
         miniEyes.resume();
         miniEyes.triggerWink();
-        showToast('🏝️ Robo Island Visible (Alt+H to hide)', 2000);
-        resetIdleTimer();
     } else {
         islandContainer.classList.add('hiding');
     }

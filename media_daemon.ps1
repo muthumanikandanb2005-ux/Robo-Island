@@ -21,11 +21,14 @@ Function Await($WinRtTask, $ResultType) {
 [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media, ContentType = WindowsRuntime] | Out-Null
 [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties, Windows.Media, ContentType = WindowsRuntime] | Out-Null
 
-# Virtual key helper using user32.dll for instant universal fallback
-$csharpKeybd = @"
+# Virtual key helper and Active Window tracker using user32.dll
+$csharpHelper = @"
 using System;
+using System.Text;
 using System.Runtime.InteropServices;
-public class KeySender {
+using System.Diagnostics;
+
+public class WinHelper {
     [DllImport("user32.dll")]
     public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
     public const int KEYEVENTF_EXTENDEDKEY = 0x1;
@@ -42,9 +45,59 @@ public class KeySender {
         keybd_event(vk, 0, KEYEVENTF_EXTENDEDKEY, UIntPtr.Zero);
         keybd_event(vk, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, UIntPtr.Zero);
     }
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("user32.dll")]
+    public static extern int GetClassName(IntPtr hWnd, StringBuilder text, int count);
+
+    public static string GetActiveProcessName() {
+        try {
+            IntPtr hwnd = GetForegroundWindow();
+            if (hwnd == IntPtr.Zero) return "";
+            uint pid = 0;
+            GetWindowThreadProcessId(hwnd, out pid);
+            if (pid == 0) return "";
+            Process p = Process.GetProcessById((int)pid);
+            return p != null ? p.ProcessName.ToLower() : "";
+        } catch {
+            return "";
+        }
+    }
+
+    public static string GetActiveWindowTitle() {
+        try {
+            IntPtr hwnd = GetForegroundWindow();
+            if (hwnd == IntPtr.Zero) return "";
+            StringBuilder sb = new StringBuilder(512);
+            GetWindowText(hwnd, sb, 512);
+            return sb.ToString();
+        } catch {
+            return "";
+        }
+    }
+
+    public static string GetActiveClassName() {
+        try {
+            IntPtr hwnd = GetForegroundWindow();
+            if (hwnd == IntPtr.Zero) return "";
+            StringBuilder sb = new StringBuilder(256);
+            GetClassName(hwnd, sb, 256);
+            return sb.ToString();
+        } catch {
+            return "";
+        }
+    }
 }
 "@
-Add-Type -TypeDefinition $csharpKeybd -Language CSharp
+Add-Type -TypeDefinition $csharpHelper -Language CSharp
 
 $asyncOp = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()
 $manager = Await $asyncOp ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
@@ -73,31 +126,31 @@ while ($true) {
 
         switch ($action) {
             "playpause" {
-                [KeySender]::SendMediaKey([KeySender]::VK_MEDIA_PLAY_PAUSE)
+                [WinHelper]::SendMediaKey([WinHelper]::VK_MEDIA_PLAY_PAUSE)
                 if ($session) {
                     try { $null = $session.TryTogglePlayPauseAsync() } catch {}
                 }
             }
             "next" {
-                [KeySender]::SendMediaKey([KeySender]::VK_MEDIA_NEXT_TRACK)
+                [WinHelper]::SendMediaKey([WinHelper]::VK_MEDIA_NEXT_TRACK)
                 if ($session) {
                     try { $null = $session.TrySkipNextAsync() } catch {}
                 }
             }
             "prev" {
-                [KeySender]::SendMediaKey([KeySender]::VK_MEDIA_PREV_TRACK)
+                [WinHelper]::SendMediaKey([WinHelper]::VK_MEDIA_PREV_TRACK)
                 if ($session) {
                     try { $null = $session.TrySkipPreviousAsync() } catch {}
                 }
             }
             "volup" {
-                [KeySender]::SendMediaKey([KeySender]::VK_VOLUME_UP)
+                [WinHelper]::SendMediaKey([WinHelper]::VK_VOLUME_UP)
             }
             "voldown" {
-                [KeySender]::SendMediaKey([KeySender]::VK_VOLUME_DOWN)
+                [WinHelper]::SendMediaKey([WinHelper]::VK_VOLUME_DOWN)
             }
             "mute" {
-                [KeySender]::SendMediaKey([KeySender]::VK_VOLUME_MUTE)
+                [WinHelper]::SendMediaKey([WinHelper]::VK_VOLUME_MUTE)
             }
             "seek" {
                 if ($session -and $param) {
@@ -109,6 +162,16 @@ while ($true) {
                 }
             }
         }
+
+        # Foreground window & Desktop detection
+        $fgProc = [WinHelper]::GetActiveProcessName()
+        $fgTitle = [WinHelper]::GetActiveWindowTitle()
+        $fgClass = [WinHelper]::GetActiveClassName()
+
+        # Desktop is active if explorer is focused with Progman/WorkerW class or title Program Manager, or if no window is focused
+        $isDesktop = ($fgProc -eq "explorer" -and ($fgClass -eq "Progman" -or $fgClass -eq "WorkerW" -or $fgTitle -eq "Program Manager")) -or ($fgProc -eq "")
+        $isBrowser = [bool]($fgProc -match "(chrome|msedge|brave|firefox|opera|vivaldi|arc|browser)")
+        $isYouTube = [bool]($fgTitle -like "*YouTube*" -or $fgTitle -like "*youtube.com*")
 
         # Query session state
         if ($manager) {
@@ -130,6 +193,11 @@ while ($true) {
                 status = if ($info) { $info.PlaybackStatus.ToString() } else { "Unknown" }
                 position = if ($timeline) { [Math]::Round($timeline.Position.TotalSeconds, 1) } else { 0 }
                 duration = if ($timeline) { [Math]::Round($timeline.EndTime.TotalSeconds, 1) } else { 0 }
+                fgProcess = $fgProc
+                fgTitle = $fgTitle
+                isDesktop = [bool]$isDesktop
+                isBrowser = [bool]$isBrowser
+                isYouTube = [bool]$isYouTube
             }
             [Console]::WriteLine(($res | ConvertTo-Json -Compress))
         } else {
@@ -137,6 +205,11 @@ while ($true) {
                 success = $false
                 message = "No active media session"
                 status = "Stopped"
+                fgProcess = $fgProc
+                fgTitle = $fgTitle
+                isDesktop = [bool]$isDesktop
+                isBrowser = [bool]$isBrowser
+                isYouTube = [bool]$isYouTube
             }
             [Console]::WriteLine(($res | ConvertTo-Json -Compress))
         }

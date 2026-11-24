@@ -88,24 +88,27 @@ class RoboEyes {
     update(dt = 0.016) {
         const now = Date.now();
 
-        // 1. Organic Saccades ONLY if not actively tracking mouse (idle for > 2.5s)
-        const isTrackingActive = this.trackMouse && (now - this.lastLookAtTime < 2500);
+        // 1. Organic Saccades ONLY if not actively tracking mouse (idle for > 2.0s)
+        const isTrackingActive = this.trackMouse && (now - this.lastLookAtTime < 2000);
 
         if (!isTrackingActive) {
             if (now - this.lastSaccadeTime > this.nextSaccadeInterval) {
                 this.lastSaccadeTime = now;
-                this.nextSaccadeInterval = 1600 + Math.random() * 2500;
+                this.nextSaccadeInterval = 900 + Math.random() * 1800;
                 
                 const rand = Math.random();
-                if (rand < 0.45) {
+                if (rand < 0.22) {
                     this.targetLookX = 0;
                     this.targetLookY = 0;
-                } else if (rand < 0.7) {
-                    this.targetLookX = (Math.random() - 0.5) * 1.0;
-                    this.targetLookY = (Math.random() - 0.5) * 0.4;
+                } else if (rand < 0.55) {
+                    this.targetLookX = (Math.random() - 0.5) * 1.8;
+                    this.targetLookY = (Math.random() - 0.5) * 0.9;
+                } else if (rand < 0.8) {
+                    this.targetLookX = (Math.random() > 0.5 ? 0.9 : -0.9);
+                    this.targetLookY = -0.35; // Curious upward peek
                 } else {
-                    this.targetLookX = (Math.random() > 0.5 ? 0.6 : -0.6);
-                    this.targetLookY = -0.2;
+                    this.targetLookX = (Math.random() - 0.5) * 1.4;
+                    this.targetLookY = 0.6; // Downward glance
                 }
             }
         }
@@ -116,18 +119,18 @@ class RoboEyes {
                 this.isBlinking = true;
                 this.blinkProgress = 0;
                 this.lastBlinkTime = now;
-                this.nextBlinkInterval = 2500 + Math.random() * 3500;
+                this.nextBlinkInterval = 2200 + Math.random() * 3200;
             }
         } else {
-            this.blinkProgress += dt * 5.8;
+            this.blinkProgress += dt * 6.2;
             if (this.blinkProgress >= 1) {
                 this.isBlinking = false;
                 this.blinkProgress = 0;
             }
         }
 
-        // 3. Ultra-smooth exponential spring interpolation (framerate-independent)
-        const springFactor = 1 - Math.exp(-14 * dt);
+        // 3. Ultra-smooth exponential spring interpolation (framerate-independent, snappy)
+        const springFactor = 1 - Math.exp(-18 * dt);
         this.currentLookX += (this.targetLookX - this.currentLookX) * springFactor;
         this.currentLookY += (this.targetLookY - this.currentLookY) * springFactor;
 
@@ -147,8 +150,9 @@ class RoboEyes {
         const centerX = width / 2;
         const centerY = height / 2;
 
-        const maxLookOffsetX = this.options.mini ? 6 : 9;
-        const maxLookOffsetY = this.options.mini ? 4 : 5;
+        // Amplified eye movement ranges for noticeable, expressive tracking
+        const maxLookOffsetX = this.options.mini ? 13 : 20;
+        const maxLookOffsetY = this.options.mini ? 6 : 10;
         const lookOffsetX = this.currentLookX * maxLookOffsetX;
         const lookOffsetY = this.currentLookY * maxLookOffsetY;
 
@@ -186,6 +190,10 @@ class RoboEyes {
         ctx.save();
         ctx.translate(x, y);
 
+        // Expressive gaze tilt & micro-perspective
+        const glanceTilt = this.currentLookX * (this.options.mini ? 0.08 : 0.12);
+        ctx.rotate(glanceTilt);
+
         if (this.mood === 'happy') {
             ctx.beginPath();
             ctx.strokeStyle = this.options.primaryColor;
@@ -201,7 +209,7 @@ class RoboEyes {
             ctx.fill();
 
         } else if (this.mood === 'love') {
-            ctx.fillStyle = '#ff2a6d';
+            ctx.fillStyle = '#ff007f';
             ctx.beginPath();
             const topCurveHeight = effectiveHeight * 0.3;
             ctx.moveTo(0, topCurveHeight);
@@ -213,7 +221,7 @@ class RoboEyes {
             ctx.fill();
 
         } else if (this.mood === 'dizzy') {
-            ctx.strokeStyle = '#ff3366';
+            ctx.strokeStyle = '#ff0055';
             ctx.lineWidth = this.options.mini ? 2 : 3.5;
             ctx.lineCap = 'round';
             const spin = (Date.now() / 140) * (isLeft ? 1 : -1);
@@ -236,13 +244,15 @@ class RoboEyes {
             ctx.roundRect(rx, ry, w, effectiveHeight, actualRadius);
             ctx.fill();
 
-            // Crisp pupil reflection glint with 3D parallax tracking
-            if (effectiveHeight > 7) {
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+            // Crisp pupil reflection glint with amplified 3D parallax tracking
+            if (effectiveHeight > 6) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
                 ctx.beginPath();
-                const glintSize = this.options.mini ? 2 : 3.5;
-                const glintOffsetX = (isLeft ? -w * 0.16 : -w * 0.12) + (this.currentLookX * (this.options.mini ? 2.5 : 4));
-                const glintOffsetY = -effectiveHeight * 0.2 + (this.currentLookY * (this.options.mini ? 2.5 : 4));
+                const glintSize = this.options.mini ? 2.5 : 4.0;
+                const glintMultX = this.options.mini ? 4.2 : 7.0;
+                const glintMultY = this.options.mini ? 3.0 : 5.5;
+                const glintOffsetX = (isLeft ? -w * 0.16 : -w * 0.12) + (this.currentLookX * glintMultX);
+                const glintOffsetY = -effectiveHeight * 0.18 + (this.currentLookY * glintMultY);
                 ctx.arc(glintOffsetX, glintOffsetY, glintSize, 0, Math.PI * 2);
                 ctx.fill();
             }
