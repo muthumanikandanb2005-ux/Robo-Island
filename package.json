@@ -1,6 +1,6 @@
 {
   "name": "dynamic-island-windows",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Ultra-sleek Dynamic Island for Windows with Animated Robo Eyes, Universal Media Controls & Live System Metrics",
   "main": "main.js",
   "scripts": {

@@ -8,11 +8,15 @@ const expandedView = document.getElementById('expanded-view');
 
 // Mini View DOM
 const miniCanvas = document.getElementById('mini-eyes-canvas');
+const miniAudioDot = document.getElementById('mini-audio-dot');
 
 // Header DOM
 const largeCanvas = document.getElementById('large-eyes-canvas');
 const roboAvatarWrapper = document.querySelector('.robo-avatar-wrapper');
 const roboMoodTag = document.getElementById('robo-mood-tag');
+const batteryIndicator = document.getElementById('battery-indicator');
+const batteryIcon = document.getElementById('battery-icon');
+const batteryPct = document.getElementById('battery-pct');
 const btnPin = document.getElementById('btn-pin');
 const btnCollapse = document.getElementById('btn-collapse');
 
@@ -42,6 +46,7 @@ const ramBarFill = document.getElementById('ram-bar-fill');
 const ramUsed = document.getElementById('ram-used');
 const ramTotal = document.getElementById('ram-total');
 const ramStatusBadge = document.getElementById('ram-status-badge');
+const btnTrimMem = document.getElementById('btn-trim-mem');
 const cpuPercent = document.getElementById('cpu-percent');
 const cpuBarFill = document.getElementById('cpu-bar-fill');
 const cpuStatusBadge = document.getElementById('cpu-status-badge');
@@ -60,8 +65,19 @@ const chkFollowMouse = document.getElementById('chk-follow-mouse');
 // Tools DOM
 const toolSnip = document.getElementById('tool-snip');
 const toolTaskmgr = document.getElementById('tool-taskmgr');
+const toolCalc = document.getElementById('tool-calc');
+const toolNotepad = document.getElementById('tool-notepad');
+const toolTerminal = document.getElementById('tool-terminal');
+const toolSound = document.getElementById('tool-sound');
 const toolSettings = document.getElementById('tool-settings');
 const toolLock = document.getElementById('tool-lock');
+
+// Clipboard DOM
+const clipPreviewText = document.getElementById('clip-preview-text');
+const clipCharCount = document.getElementById('clip-char-count');
+const btnClipRefresh = document.getElementById('btn-clip-refresh');
+const btnClipCopy = document.getElementById('btn-clip-copy');
+const btnClipClear = document.getElementById('btn-clip-clear');
 
 // Navigation Tabs
 const navTabs = document.querySelectorAll('.nav-tab');
@@ -141,10 +157,24 @@ window.addEventListener('mousemove', (e) => {
 });
 
 // ==========================================
-// 2. EXPAND / COLLAPSE ORCHESTRATION
+// 2. EXPAND / COLLAPSE ORCHESTRATION & INTERACTIONS
 // ==========================================
 collapsedView.addEventListener('click', () => {
     expandIsland();
+});
+
+// Double click mini eyes to toggle media playback without expanding
+collapsedView.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    ipcRenderer.send('media-action', { action: 'playpause' });
+    miniEyes.triggerWink();
+});
+
+// Right click mini eyes for quick native context menu
+collapsedView.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    ipcRenderer.send('show-mini-context-menu');
 });
 
 btnCollapse.addEventListener('click', (e) => {
@@ -213,6 +243,10 @@ navTabs.forEach(tab => {
         const targetPanel = document.getElementById(targetId);
         if (targetPanel) targetPanel.classList.add('active');
 
+        if (targetId === 'tab-tools') {
+            updateClipboardPreview();
+        }
+
         // Notify main process to only fetch stats on-demand
         ipcRenderer.send('tab-changed', targetId);
     });
@@ -269,6 +303,11 @@ function renderMedia(data) {
 
     miniEyes.setMusicPlaying(isPlaying);
     largeEyes.setMusicPlaying(isPlaying);
+
+    // Mini audio equalizer bars in collapsed mode
+    if (miniAudioDot) {
+        miniAudioDot.style.display = isPlaying ? 'flex' : 'none';
+    }
 
     if (isPlaying) {
         vinylDisc.classList.add('spinning');
@@ -512,11 +551,105 @@ colorSwatches.forEach(swatch => {
     });
 });
 
-// Tools
+// Tools Actions
 toolSnip.addEventListener('click', () => ipcRenderer.send('system-action', { action: 'snip' }));
 toolTaskmgr.addEventListener('click', () => ipcRenderer.send('system-action', { action: 'taskmgr' }));
+if (toolCalc) toolCalc.addEventListener('click', () => ipcRenderer.send('system-action', { action: 'calc' }));
+if (toolNotepad) toolNotepad.addEventListener('click', () => ipcRenderer.send('system-action', { action: 'notepad' }));
+if (toolTerminal) toolTerminal.addEventListener('click', () => ipcRenderer.send('system-action', { action: 'terminal' }));
+if (toolSound) toolSound.addEventListener('click', () => ipcRenderer.send('system-action', { action: 'sound' }));
 toolSettings.addEventListener('click', () => ipcRenderer.send('system-action', { action: 'settings' }));
 toolLock.addEventListener('click', () => ipcRenderer.send('system-action', { action: 'lock' }));
+
+// Memory Trim Action
+if (btnTrimMem) {
+    btnTrimMem.addEventListener('click', () => {
+        btnTrimMem.textContent = '...';
+        ipcRenderer.send('system-action', { action: 'trim-mem' });
+        setTimeout(() => {
+            btnTrimMem.textContent = '✓ Done';
+            setTimeout(() => { btnTrimMem.textContent = 'Trim'; }, 1500);
+        }, 800);
+    });
+}
+
+// Clipboard Preview & Management
+const { clipboard } = require('electron');
+
+function updateClipboardPreview() {
+    try {
+        const text = clipboard.readText();
+        if (text && text.trim().length > 0) {
+            clipPreviewText.textContent = text.length > 140 ? text.slice(0, 140) + '...' : text;
+            clipCharCount.textContent = `${text.length} chars`;
+        } else {
+            clipPreviewText.textContent = 'Clipboard is empty';
+            clipCharCount.textContent = '0 chars';
+        }
+    } catch (e) {
+        clipPreviewText.textContent = 'Clipboard inaccessible';
+    }
+}
+
+if (btnClipRefresh) {
+    btnClipRefresh.addEventListener('click', () => {
+        updateClipboardPreview();
+        btnClipRefresh.textContent = '✓';
+        setTimeout(() => { btnClipRefresh.textContent = '↻'; }, 700);
+    });
+}
+
+if (btnClipCopy) {
+    btnClipCopy.addEventListener('click', () => {
+        const current = clipboard.readText();
+        if (current) {
+            btnClipCopy.textContent = '✓ Copied';
+            setTimeout(() => { btnClipCopy.textContent = 'Copy'; }, 1000);
+        }
+    });
+}
+
+if (btnClipClear) {
+    btnClipClear.addEventListener('click', () => {
+        clipboard.clear();
+        updateClipboardPreview();
+    });
+}
+
+// Battery Telemetry via Native Web Battery API (0% CPU, event-driven)
+if (navigator.getBattery) {
+    navigator.getBattery().then(battery => {
+        function renderBattery() {
+            const level = Math.round(battery.level * 100);
+            const isCharging = battery.charging;
+            if (batteryPct) batteryPct.textContent = `${level}%`;
+            if (batteryIcon) batteryIcon.textContent = isCharging ? '⚡' : (level > 20 ? '🔋' : '🪫');
+            if (batteryIndicator) {
+                batteryIndicator.className = 'header-battery-pill' + 
+                    (isCharging ? ' charging' : (level <= 20 ? ' low' : ''));
+            }
+
+            // Low battery cute reaction
+            if (level <= 15 && !isCharging) {
+                miniEyes.setMood('sleepy');
+                largeEyes.setMood('sleepy');
+                if (roboMoodTag) roboMoodTag.textContent = 'Battery Low (Sleepy)';
+            }
+        }
+        renderBattery();
+        battery.addEventListener('levelchange', renderBattery);
+        battery.addEventListener('chargingchange', renderBattery);
+    }).catch(() => {});
+}
+
+// Mood Synchronization from Native Context Menu
+ipcRenderer.on('set-mood', (event, mood) => {
+    if (!mood) return;
+    largeEyes.setMood(mood);
+    miniEyes.setMood(mood);
+    if (roboMoodTag) roboMoodTag.textContent = `Mood: ${mood.toUpperCase()}`;
+    moodBtns.forEach(b => b.classList.toggle('active', b.dataset.mood === mood));
+});
 
 // Initialize global desktop cursor tracking
 ipcRenderer.send('toggle-cursor-tracking', true);

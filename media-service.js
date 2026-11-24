@@ -73,7 +73,9 @@ class MediaService extends EventEmitter {
 
         this.psProcess.on('exit', () => {
             this.isReady = false;
-            setTimeout(() => this.initDaemon(), 2500);
+            if (!this.destroyed) {
+                setTimeout(() => this.initDaemon(), 2500);
+            }
         });
 
         // Periodic poll every 1.5 seconds for media updates
@@ -129,6 +131,7 @@ class MediaService extends EventEmitter {
     }
 
     destroy() {
+        this.destroyed = true;
         if (this.psProcess) {
             this.sendCommand('exit');
             this.psProcess.kill();

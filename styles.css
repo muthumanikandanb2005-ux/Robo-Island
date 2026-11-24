@@ -55,6 +55,31 @@ body {
     background: transparent;
 }
 
+.mini-audio-dot {
+    display: flex;
+    align-items: center;
+    gap: 2.5px;
+    margin-right: 6px;
+    height: 16px;
+}
+
+.mini-audio-dot .bar {
+    width: 2.5px;
+    background: #00f0ff;
+    border-radius: 2px;
+    box-shadow: 0 0 6px rgba(0, 240, 255, 0.8);
+    animation: miniWave 0.7s ease-in-out infinite alternate;
+}
+
+.mini-audio-dot .b1 { animation-delay: 0.05s; height: 6px; }
+.mini-audio-dot .b2 { animation-delay: 0.25s; height: 13px; }
+.mini-audio-dot .b3 { animation-delay: 0.15s; height: 8px; }
+
+@keyframes miniWave {
+    0% { transform: scaleY(0.35); opacity: 0.5; }
+    100% { transform: scaleY(1.3); opacity: 1; }
+}
+
 .island.expanded .pill-view {
     display: none;
 }
@@ -93,6 +118,44 @@ body {
 
 .island.expanded .expanded-view {
     display: flex;
+    animation: islandFadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes islandFadeIn {
+    0% {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.98);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.header-battery-pill {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #e2e8f0;
+    cursor: default;
+    transition: all 0.2s ease;
+}
+
+.header-battery-pill.charging {
+    border-color: rgba(0, 255, 136, 0.4);
+    color: #00ff88;
+    box-shadow: 0 0 8px rgba(0, 255, 136, 0.2);
+}
+
+.header-battery-pill.low {
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #ef4444;
 }
 
 /* Header */
@@ -881,10 +944,123 @@ input:checked + .slider:before {
     margin-bottom: 2px;
 }
 
+.mini-pill-btn {
+    background: rgba(0, 240, 255, 0.12);
+    border: 1px solid rgba(0, 240, 255, 0.3);
+    color: #00f0ff;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.mini-pill-btn:hover {
+    background: rgba(0, 240, 255, 0.25);
+    transform: scale(1.05);
+}
+
+.mini-pill-btn:active {
+    transform: scale(0.95);
+}
+
 .icon-amber { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
 .icon-cyan { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
 .icon-green { background: rgba(52, 211, 153, 0.2); color: #34d399; }
 .icon-pink { background: rgba(244, 114, 182, 0.2); color: #f472b6; }
+.icon-blue { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+.icon-purple { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
+
+/* Clipboard Preview Card */
+.clipboard-preview-card {
+    margin-top: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.clipboard-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.clipboard-title-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.clip-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #e2e8f0;
+}
+
+.clip-count-tag {
+    font-size: 9px;
+    background: rgba(255, 255, 255, 0.08);
+    padding: 1px 6px;
+    border-radius: 8px;
+    color: #94a3b8;
+}
+
+.clipboard-action-btns {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.clip-mini-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #cbd5e1;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.clip-mini-btn:hover {
+    background: rgba(0, 240, 255, 0.15);
+    border-color: rgba(0, 240, 255, 0.4);
+    color: #00f0ff;
+}
+
+.clipboard-content-box {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 10px;
+    color: #cbd5e1;
+    max-height: 44px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.tab-panel {
+    display: none;
+}
+
+.tab-panel.active {
+    display: block;
+    animation: tabSlideIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes tabSlideIn {
+    0% { opacity: 0; transform: translateY(6px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
 
 .tool-title { font-size: 12px; font-weight: 700; color: #ffffff; }
 .tool-desc { font-size: 9px; color: #64748b; }

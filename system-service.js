@@ -155,6 +155,28 @@ class SystemService extends EventEmitter {
         exec('start ms-settings:');
     }
 
+    openCalculator() {
+        exec('calc.exe');
+    }
+
+    openNotepad() {
+        exec('notepad.exe');
+    }
+
+    openTerminal() {
+        exec('start wt.exe || start powershell.exe');
+    }
+
+    openSoundSettings() {
+        exec('start ms-settings:sound');
+    }
+
+    trimMemory() {
+        exec('powershell -NoProfile -Command "[System.GC]::Collect(); [System.GC]::WaitForPendingFinalizers()"', () => {
+            this.fetchLightStats();
+        });
+    }
+
     lockWorkstation() {
         exec('rundll32.exe user32.dll,LockWorkStation');
     }

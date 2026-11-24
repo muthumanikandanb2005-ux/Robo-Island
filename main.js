@@ -43,6 +43,20 @@ if (process.platform === 'win32') {
     app.setAppUserModelId('RoboIsland.App');
 }
 
+// Single Instance Lock: prevents duplicate processes
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+    app.quit();
+} else {
+    app.on('second-instance', () => {
+        if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
+            resizeIsland(true);
+        }
+    });
+}
+
 function createWindow() {
     // Configure auto-start safely inside whenReady
     try {
@@ -84,10 +98,20 @@ function createWindow() {
         mainWindow.setAlwaysOnTop(true);
     }
 
-    // Register global toggle hotkey: Alt+I or Ctrl+Shift+Space
+    // Smart Auto-Collapse on Blur (only if not pinned)
+    mainWindow.on('blur', () => {
+        if (isExpanded && !isPinned) {
+            resizeIsland(false);
+        }
+    });
+
+    // Register global toggle & media hotkeys
     try {
         globalShortcut.register('Alt+I', () => toggleIsland());
         globalShortcut.register('CommandOrControl+Shift+Space', () => toggleIsland());
+        globalShortcut.register('Alt+M', () => mediaService.toggleMute());
+        globalShortcut.register('Alt+.', () => mediaService.next());
+        globalShortcut.register('Alt+,', () => mediaService.previous());
     } catch (e) {}
 
     // Wire Media Service events
@@ -277,8 +301,52 @@ ipcMain.on('system-action', (event, payload) => {
         case 'taskmgr': systemService.openTaskManager(); break;
         case 'snip': systemService.openSnippingTool(); break;
         case 'settings': systemService.openSettings(); break;
+        case 'calc': systemService.openCalculator(); break;
+        case 'notepad': systemService.openNotepad(); break;
+        case 'terminal': systemService.openTerminal(); break;
+        case 'sound': systemService.openSoundSettings(); break;
+        case 'trim-mem': systemService.trimMemory(); break;
         case 'lock': systemService.lockWorkstation(); break;
     }
+});
+
+ipcMain.on('show-mini-context-menu', (event) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const miniMenu = Menu.buildFromTemplate([
+        { label: 'Robo Island', enabled: false },
+        { type: 'separator' },
+        { label: isExpanded ? 'Collapse Island' : 'Expand Island', click: () => toggleIsland() },
+        { label: 'Play / Pause (Dbl-Click)', click: () => mediaService.playPause() },
+        { label: 'Next Track (Alt + .)', click: () => mediaService.next() },
+        { label: 'Previous Track (Alt + ,)', click: () => mediaService.previous() },
+        { label: 'Toggle Mute (Alt + M)', click: () => mediaService.toggleMute() },
+        { type: 'separator' },
+        { 
+            label: 'Pin Expanded', 
+            type: 'checkbox', 
+            checked: isPinned, 
+            click: (item) => {
+                isPinned = item.checked;
+                if (isPinned) resizeIsland(true);
+            }
+        },
+        { type: 'separator' },
+        { 
+            label: 'Mood Expression', 
+            submenu: [
+                { label: '😊 Neutral', click: () => mainWindow.webContents.send('set-mood', 'neutral') },
+                { label: '😃 Happy', click: () => mainWindow.webContents.send('set-mood', 'happy') },
+                { label: '💖 Love', click: () => mainWindow.webContents.send('set-mood', 'love') },
+                { label: '👀 Curious', click: () => mainWindow.webContents.send('set-mood', 'curious') },
+                { label: '😉 Wink', click: () => mainWindow.webContents.send('set-mood', 'wink') },
+                { label: '😴 Sleepy', click: () => mainWindow.webContents.send('set-mood', 'sleepy') },
+                { label: '💫 Dizzy', click: () => mainWindow.webContents.send('set-mood', 'dizzy') }
+            ]
+        },
+        { type: 'separator' },
+        { label: 'Quit Robo Island', click: () => app.quit() }
+    ]);
+    miniMenu.popup({ window: mainWindow });
 });
 
 app.whenReady().then(createWindow);

@@ -85,7 +85,7 @@ class RoboEyes {
         }, 1200);
     }
 
-    update() {
+    update(dt = 0.016) {
         const now = Date.now();
 
         // 1. Organic Saccades ONLY if not actively tracking mouse (idle for > 2.5s)
@@ -110,7 +110,7 @@ class RoboEyes {
             }
         }
 
-        // 2. Blink loop
+        // 2. Framerate-independent blink loop (~180ms blink)
         if (!this.isBlinking) {
             if (now - this.lastBlinkTime > this.nextBlinkInterval) {
                 this.isBlinking = true;
@@ -119,20 +119,21 @@ class RoboEyes {
                 this.nextBlinkInterval = 2500 + Math.random() * 3500;
             }
         } else {
-            this.blinkProgress += 0.16;
+            this.blinkProgress += dt * 5.8;
             if (this.blinkProgress >= 1) {
                 this.isBlinking = false;
                 this.blinkProgress = 0;
             }
         }
 
-        // 3. Ultra-smooth exponential spring interpolation
-        this.currentLookX += (this.targetLookX - this.currentLookX) * 0.22;
-        this.currentLookY += (this.targetLookY - this.currentLookY) * 0.22;
+        // 3. Ultra-smooth exponential spring interpolation (framerate-independent)
+        const springFactor = 1 - Math.exp(-14 * dt);
+        this.currentLookX += (this.targetLookX - this.currentLookX) * springFactor;
+        this.currentLookY += (this.targetLookY - this.currentLookY) * springFactor;
 
         // 4. Music pulse
         if (this.isMusicPlaying) {
-            this.pulsePhase += 0.1;
+            this.pulsePhase += dt * 6.5;
         }
     }
 
@@ -253,9 +254,13 @@ class RoboEyes {
     start() {
         if (this.isRunning) return;
         this.isRunning = true;
-        const loop = () => {
+        let lastTimestamp = performance.now();
+        const loop = (timestamp) => {
             if (!this.isRunning) return;
-            this.update();
+            const now = timestamp || performance.now();
+            const dt = Math.min((now - lastTimestamp) / 1000, 0.1);
+            lastTimestamp = now;
+            this.update(dt);
             this.draw();
             this.animFrameId = requestAnimationFrame(loop);
         };
