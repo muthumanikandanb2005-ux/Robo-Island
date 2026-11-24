@@ -30,10 +30,20 @@ const SIZES = {
     expanded: { width: 580, height: 380, y: 8 }
 };
 
-function getCenteredX(width) {
+let cachedDisplayBounds = { width: 1920, height: 1080 };
+
+function updateCachedDisplay() {
     try {
         const primaryDisplay = screen.getPrimaryDisplay();
-        const { width: screenWidth } = primaryDisplay.workAreaSize;
+        if (primaryDisplay && primaryDisplay.bounds) {
+            cachedDisplayBounds = primaryDisplay.bounds;
+        }
+    } catch (e) {}
+}
+
+function getCenteredX(width) {
+    try {
+        const screenWidth = cachedDisplayBounds.width || 1920;
         return Math.round((screenWidth - width) / 2);
     } catch (e) {
         return 600;
@@ -52,7 +62,9 @@ if (!gotTheLock) {
 } else {
     app.on('second-instance', () => {
         if (mainWindow) {
+            if (isHidden) showIsland();
             if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
             mainWindow.focus();
             resizeIsland(true);
         }
@@ -60,6 +72,13 @@ if (!gotTheLock) {
 }
 
 function createWindow() {
+    updateCachedDisplay();
+    try {
+        screen.on('display-metrics-changed', updateCachedDisplay);
+        screen.on('display-added', updateCachedDisplay);
+        screen.on('display-removed', updateCachedDisplay);
+    } catch(e) {}
+
     // Configure auto-start safely inside whenReady
     try {
         app.setLoginItemSettings({
@@ -99,13 +118,6 @@ function createWindow() {
     } catch (e) {
         mainWindow.setAlwaysOnTop(true);
     }
-
-    // Smart Auto-Collapse on Blur (only if not pinned)
-    mainWindow.on('blur', () => {
-        if (isExpanded && !isPinned) {
-            resizeIsland(false);
-        }
-    });
 
     // Register global toggle, visibility & media hotkeys
     try {
@@ -153,6 +165,9 @@ function createWindow() {
 function resizeIsland(expanded) {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     isExpanded = expanded;
+    if (expanded && isHidden) {
+        showIsland();
+    }
     const targetSize = expanded ? SIZES.expanded : SIZES.collapsed;
     const targetX = getCenteredX(targetSize.width);
 
@@ -165,13 +180,17 @@ function resizeIsland(expanded) {
         height: targetSize.height
     }, true);
 
+    if (expanded) {
+        mainWindow.show();
+        mainWindow.focus();
+    }
+
     mainWindow.webContents.send('island-state-changed', { expanded, pinned: isPinned });
 }
 
 function toggleIsland() {
     if (isHidden) {
         showIsland();
-        return;
     }
     resizeIsland(!isExpanded);
 }
@@ -270,8 +289,8 @@ function startCursorTracking() {
         if (!isTrackingEnabled || !mainWindow || mainWindow.isDestroyed()) return;
         try {
             const point = screen.getCursorScreenPoint();
-            const primaryDisplay = screen.getPrimaryDisplay();
-            const { width: screenWidth, height: screenHeight } = primaryDisplay.bounds;
+            const screenWidth = cachedDisplayBounds.width || 1920;
+            const screenHeight = cachedDisplayBounds.height || 1080;
 
             // When island is hidden, moving mouse to top bezel (y <= 3) reveals it
             if (isHidden) {

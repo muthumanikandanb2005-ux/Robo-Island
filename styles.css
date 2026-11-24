@@ -33,7 +33,7 @@ body {
 
 /* 1. COLLAPSED VIEW: 100% FULL TRANSPARENCY, ONLY TINY EYES */
 .island.collapsed {
-    background: transparent !important;
+    background: rgba(0, 0, 0, 0.01) !important;
     border: none !important;
     box-shadow: none !important;
     backdrop-filter: none !important;
@@ -44,6 +44,7 @@ body {
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    -webkit-app-region: no-drag;
 }
 
 .pill-view {
@@ -52,7 +53,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: transparent;
+    background: rgba(0, 0, 0, 0.01);
+    -webkit-app-region: no-drag;
 }
 
 .mini-audio-dot {
