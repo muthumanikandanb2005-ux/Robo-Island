@@ -261,6 +261,28 @@
                                 <span class="slider round"></span>
                             </label>
                         </div>
+
+                        <div class="robo-lab-row toggle-row">
+                            <div>
+                                <span class="lab-label">Auto-Hide During Video Playback</span>
+                                <p class="lab-subtext">Tucks island away when watching YouTube or browser video (Restore: Alt+H or move to top edge)</p>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="chk-autohide-video">
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+
+                        <div class="robo-lab-row toggle-row">
+                            <div>
+                                <span class="lab-label">Auto-Hide On Idle (Browsing Mode)</span>
+                                <p class="lab-subtext">Automatically fades out after 5s idle; slide mouse to top edge or press Alt+H to show</p>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="chk-autohide-idle">
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
                     </div>
                 </section>
 
@@ -330,6 +352,14 @@
                             <span class="tool-title">Lock Screen</span>
                             <span class="tool-desc">Win+L</span>
                         </button>
+
+                        <button id="tool-hide" class="tool-tile">
+                            <div class="tool-icon-circle icon-amber">
+                                <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                            </div>
+                            <span class="tool-title">Hide Island</span>
+                            <span class="tool-desc">Alt+H</span>
+                        </button>
                     </div>
 
                     <!-- Live Clipboard Card -->
@@ -349,12 +379,15 @@
                     </div>
 
                     <div class="island-info-footer">
-                        <span>Robo Island • Toggle: <strong>Alt+I</strong> • Mute: <strong>Alt+M</strong> • Track: <strong>Alt+./,</strong></span>
+                        <span>Robo Island • Toggle: <strong>Alt+I</strong> • Hide/Show: <strong>Alt+H</strong> • Mute: <strong>Alt+M</strong></span>
                     </div>
                 </section>
             </div>
         </div>
     </div>
+
+    <!-- On-screen Toast Notification -->
+    <div id="island-toast" class="island-toast" style="display:none;"></div>
 
     <!-- Scripts -->
     <script src="robo-eyes.js"></script>

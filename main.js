@@ -21,6 +21,8 @@ let mainWindow = null;
 let tray = null;
 let isPinned = false;
 let isExpanded = false;
+let isHidden = false;
+let isAutoHideOnVideo = false;
 
 // Geometry configuration: Ultra-compact, non-disturbing tiny eyes
 const SIZES = {
@@ -105,19 +107,35 @@ function createWindow() {
         }
     });
 
-    // Register global toggle & media hotkeys
+    // Register global toggle, visibility & media hotkeys
     try {
         globalShortcut.register('Alt+I', () => toggleIsland());
         globalShortcut.register('CommandOrControl+Shift+Space', () => toggleIsland());
+        globalShortcut.register('Alt+H', () => toggleIslandVisibility());
+        globalShortcut.register('CommandOrControl+Shift+H', () => toggleIslandVisibility());
         globalShortcut.register('Alt+M', () => mediaService.toggleMute());
         globalShortcut.register('Alt+.', () => mediaService.next());
         globalShortcut.register('Alt+,', () => mediaService.previous());
     } catch (e) {}
 
-    // Wire Media Service events
+    // Wire Media Service events with Video Auto-Hide
     mediaService.on('update', (mediaData) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('media-update', mediaData);
+
+            // Auto-hide island while video is actively playing (if enabled)
+            if (isAutoHideOnVideo && !isExpanded) {
+                const isPlaying = (mediaData.status === 'Playing');
+                const src = (mediaData.source || '').toLowerCase();
+                const isVideo = src.includes('chrome') || src.includes('brave') || 
+                                src.includes('msedge') || src.includes('firefox') || 
+                                src.includes('youtube') || src.includes('vlc') || src.includes('netflix');
+                if (isPlaying && isVideo && !isHidden) {
+                    hideIsland();
+                } else if (!isPlaying && isHidden) {
+                    showIsland();
+                }
+            }
         }
     });
 
@@ -151,27 +169,49 @@ function resizeIsland(expanded) {
 }
 
 function toggleIsland() {
+    if (isHidden) {
+        showIsland();
+        return;
+    }
     resizeIsland(!isExpanded);
 }
 
-function createTray() {
-    try {
-        let iconPath = path.join(__dirname, 'icon.ico');
-        if (iconPath.includes('app.asar')) {
-            const unpackedPath = iconPath.replace('app.asar', 'app.asar.unpacked');
-            if (fs.existsSync(unpackedPath)) {
-                iconPath = unpackedPath;
-            }
+function hideIsland() {
+    if (!mainWindow || mainWindow.isDestroyed() || isHidden) return;
+    isHidden = true;
+    mainWindow.webContents.send('island-visibility-changed', false);
+    setTimeout(() => {
+        if (isHidden && mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.hide();
         }
-        
-        const nImg = nativeImage.createFromPath(iconPath);
-        tray = new Tray(nImg);
-        tray.setToolTip('Robo Island');
+    }, 180);
+    updateTray();
+}
 
+function showIsland() {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    isHidden = false;
+    mainWindow.show();
+    mainWindow.webContents.send('island-visibility-changed', true);
+    updateTray();
+}
+
+function toggleIslandVisibility() {
+    if (isHidden) {
+        showIsland();
+    } else {
+        hideIsland();
+    }
+}
+
+function updateTray() {
+    if (!tray) return;
+    try {
         const contextMenu = Menu.buildFromTemplate([
             { label: 'Robo Island (Running)', enabled: false },
             { type: 'separator' },
-            { label: 'Toggle Island (Alt + I)', click: () => toggleIsland() },
+            { label: isHidden ? 'Show Island (Alt + H)' : 'Hide Island (Alt + H)', click: () => toggleIslandVisibility() },
+            { label: 'Toggle Expand (Alt + I)', click: () => toggleIsland() },
             { 
                 label: 'Pin Expanded', 
                 type: 'checkbox', 
@@ -195,8 +235,24 @@ function createTray() {
             { type: 'separator' },
             { label: 'Quit Robo Island', click: () => app.quit() }
         ]);
-
         tray.setContextMenu(contextMenu);
+    } catch(e) {}
+}
+
+function createTray() {
+    try {
+        let iconPath = path.join(__dirname, 'icon.ico');
+        if (iconPath.includes('app.asar')) {
+            const unpackedPath = iconPath.replace('app.asar', 'app.asar.unpacked');
+            if (fs.existsSync(unpackedPath)) {
+                iconPath = unpackedPath;
+            }
+        }
+        
+        const nImg = nativeImage.createFromPath(iconPath);
+        tray = new Tray(nImg);
+        tray.setToolTip('Robo Island');
+        updateTray();
         tray.on('click', () => toggleIsland());
     } catch (err) {
         console.error('Tray icon init error:', err.message);
@@ -211,14 +267,26 @@ let isTrackingEnabled = true;
 function startCursorTracking() {
     if (cursorTrackingInterval) return;
     cursorTrackingInterval = setInterval(() => {
-        if (!isTrackingEnabled || !mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) return;
+        if (!isTrackingEnabled || !mainWindow || mainWindow.isDestroyed()) return;
         try {
             const point = screen.getCursorScreenPoint();
+            const primaryDisplay = screen.getPrimaryDisplay();
+            const { width: screenWidth, height: screenHeight } = primaryDisplay.bounds;
+
+            // When island is hidden, moving mouse to top bezel (y <= 3) reveals it
+            if (isHidden) {
+                const centerX = screenWidth / 2;
+                if (point.y <= 3 && Math.abs(point.x - centerX) < 160) {
+                    showIsland();
+                }
+                return;
+            }
+
+            if (!mainWindow.isVisible()) return;
+
             if (point.x !== lastCursorPos.x || point.y !== lastCursorPos.y) {
                 lastCursorPos = point;
                 const bounds = mainWindow.getBounds();
-                const primaryDisplay = screen.getPrimaryDisplay();
-                const { width: screenWidth, height: screenHeight } = primaryDisplay.bounds;
 
                 // Center of the current island on screen
                 const islandCenterX = bounds.x + (bounds.width / 2);
@@ -310,11 +378,19 @@ ipcMain.on('system-action', (event, payload) => {
     }
 });
 
+ipcMain.on('toggle-visibility', () => toggleIslandVisibility());
+ipcMain.on('hide-island', () => hideIsland());
+ipcMain.on('show-island', () => showIsland());
+ipcMain.on('set-autohide-video', (event, val) => {
+    isAutoHideOnVideo = (val === true);
+});
+
 ipcMain.on('show-mini-context-menu', (event) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const miniMenu = Menu.buildFromTemplate([
         { label: 'Robo Island', enabled: false },
         { type: 'separator' },
+        { label: isHidden ? 'Show Island (Alt + H)' : 'Hide Island (Alt + H)', click: () => toggleIslandVisibility() },
         { label: isExpanded ? 'Collapse Island' : 'Expand Island', click: () => toggleIsland() },
         { label: 'Play / Pause (Dbl-Click)', click: () => mediaService.playPause() },
         { label: 'Next Track (Alt + .)', click: () => mediaService.next() },

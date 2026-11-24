@@ -61,6 +61,8 @@ const btnOpenTaskmgr = document.getElementById('btn-open-taskmgr');
 const moodBtns = document.querySelectorAll('.mood-btn');
 const colorSwatches = document.querySelectorAll('.color-swatch');
 const chkFollowMouse = document.getElementById('chk-follow-mouse');
+const chkAutoHideVideo = document.getElementById('chk-autohide-video');
+const chkAutoHideIdle = document.getElementById('chk-autohide-idle');
 
 // Tools DOM
 const toolSnip = document.getElementById('tool-snip');
@@ -71,6 +73,8 @@ const toolTerminal = document.getElementById('tool-terminal');
 const toolSound = document.getElementById('tool-sound');
 const toolSettings = document.getElementById('tool-settings');
 const toolLock = document.getElementById('tool-lock');
+const toolHide = document.getElementById('tool-hide');
+const islandToast = document.getElementById('island-toast');
 
 // Clipboard DOM
 const clipPreviewText = document.getElementById('clip-preview-text');
@@ -558,8 +562,66 @@ if (toolCalc) toolCalc.addEventListener('click', () => ipcRenderer.send('system-
 if (toolNotepad) toolNotepad.addEventListener('click', () => ipcRenderer.send('system-action', { action: 'notepad' }));
 if (toolTerminal) toolTerminal.addEventListener('click', () => ipcRenderer.send('system-action', { action: 'terminal' }));
 if (toolSound) toolSound.addEventListener('click', () => ipcRenderer.send('system-action', { action: 'sound' }));
+if (toolHide) toolHide.addEventListener('click', () => ipcRenderer.send('hide-island'));
 toolSettings.addEventListener('click', () => ipcRenderer.send('system-action', { action: 'settings' }));
 toolLock.addEventListener('click', () => ipcRenderer.send('system-action', { action: 'lock' }));
+
+// Toast Notification Engine
+let toastTimer = null;
+function showToast(text, duration = 1800) {
+    if (!islandToast) return;
+    islandToast.textContent = text;
+    islandToast.style.display = 'block';
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+        islandToast.style.display = 'none';
+    }, duration);
+}
+
+// Auto-Hide During Video Playback
+if (chkAutoHideVideo) {
+    chkAutoHideVideo.addEventListener('change', (e) => {
+        ipcRenderer.send('set-autohide-video', e.target.checked);
+        showToast(e.target.checked ? '✓ Video Auto-Hide Active' : 'Video Auto-Hide Disabled');
+    });
+}
+
+// Auto-Hide On Idle (Browsing Mode)
+let isAutoHideIdle = false;
+let idleTimer = null;
+
+function resetIdleTimer() {
+    if (idleTimer) clearTimeout(idleTimer);
+    if (!isAutoHideIdle || isExpanded) return;
+    idleTimer = setTimeout(() => {
+        if (isAutoHideIdle && !isExpanded) {
+            ipcRenderer.send('hide-island');
+        }
+    }, 5000);
+}
+
+if (chkAutoHideIdle) {
+    chkAutoHideIdle.addEventListener('change', (e) => {
+        isAutoHideIdle = e.target.checked;
+        showToast(e.target.checked ? '✓ Auto-Hide on Idle Active (5s)' : 'Idle Auto-Hide Disabled');
+        if (isAutoHideIdle) resetIdleTimer();
+    });
+}
+
+window.addEventListener('mousemove', () => resetIdleTimer());
+
+// Visibility State Changes from Main (Hotkeys Alt+H / Edge Peek)
+ipcRenderer.on('island-visibility-changed', (event, visible) => {
+    if (visible) {
+        islandContainer.classList.remove('hiding');
+        miniEyes.resume();
+        miniEyes.triggerWink();
+        showToast('🏝️ Robo Island Visible (Alt+H to hide)', 2000);
+        resetIdleTimer();
+    } else {
+        islandContainer.classList.add('hiding');
+    }
+});
 
 // Memory Trim Action
 if (btnTrimMem) {
