@@ -16,14 +16,23 @@ process.on('unhandledRejection', (reason) => {
 
 const mediaService = require('./media-service');
 const systemService = require('./system-service');
+const settingsService = require('./settings-service');
 
 let mainWindow = null;
 let tray = null;
-let isPinned = false;
+let isPinned = settingsService.get('isPinned', false);
 let isExpanded = false;
 let isHidden = false;
-let isAutoHideOnVideo = false;
-let isAutoHideBrowsing = false;
+let isAutoHideOnVideo = settingsService.get('autohideVideo', false);
+let isAutoHideBrowsing = settingsService.get('autohideBrowsing', false);
+let isHoverPeekEnabled = settingsService.get('hoverPeek', true);
+let isAlwaysOnTop = settingsService.get('alwaysOnTop', true);
+
+// Peeking & Hover Protection for Flawless Auto-Hide
+let isPeeking = false;
+let isMouseOverIsland = false;
+let peekLeaveTimer = null;
+let lastMediaState = null;
 
 // Geometry configuration: Ultra-compact, non-disturbing tiny eyes
 const SIZES = {
@@ -135,35 +144,7 @@ function createWindow() {
     mediaService.on('update', (mediaData) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('media-update', mediaData);
-
-            const isDesktop = (mediaData.isDesktop === true);
-            const isBrowser = (mediaData.isBrowser === true);
-            const isYouTube = (mediaData.isYouTube === true) || 
-                              ((mediaData.title || '').toLowerCase().includes('youtube')) ||
-                              ((mediaData.artist || '').toLowerCase().includes('youtube'));
-            const isPlaying = (mediaData.status === 'Playing');
-
-            // CRITICAL USER RULES:
-            // 1. In Home Screen (Desktop): NEVER HIDE! Always keep robot eyes visible!
-            // 2. In YouTube or while browsing: Hide if auto-hide is enabled.
-            // 3. When returning to Desktop: Instantly unhide!
-            if (!isExpanded) {
-                if (isDesktop) {
-                    // Home Screen: MUST NOT HIDE!
-                    if (isHidden) {
-                        showIsland();
-                    }
-                } else if (isAutoHideOnVideo || isAutoHideBrowsing) {
-                    const shouldHideInBrowser = isAutoHideBrowsing && isBrowser;
-                    const shouldHideInVideo = isAutoHideOnVideo && (isYouTube || isBrowser) && isPlaying;
-
-                    if ((shouldHideInBrowser || shouldHideInVideo) && !isHidden) {
-                        hideIsland();
-                    } else if (!shouldHideInBrowser && !shouldHideInVideo && isHidden) {
-                        showIsland();
-                    }
-                }
-            }
+            evaluateAutoHide(mediaData);
         }
     });
 
@@ -176,6 +157,51 @@ function createWindow() {
 
     createTray();
     startCursorTracking();
+}
+
+function evaluateAutoHide(mediaData) {
+    if (mediaData) lastMediaState = mediaData;
+    const data = lastMediaState || {};
+
+    const isDesktop = (data.isDesktop === true);
+    const isBrowser = (data.isBrowser === true);
+    const isYouTube = (data.isYouTube === true) || 
+                      ((data.title || '').toLowerCase().includes('youtube')) ||
+                      ((data.artist || '').toLowerCase().includes('youtube'));
+    const isVideoApp = (data.isVideoApp === true);
+    const isPlaying = (data.status === 'Playing');
+
+    // Rule 0: Never hide if pinned or expanded
+    if (isExpanded || isPinned) {
+        if (isHidden) showIsland();
+        return;
+    }
+
+    // Rule 1: Never hide if user is currently peeking or hovering over the island
+    if (isPeeking || isMouseOverIsland) {
+        return;
+    }
+
+    // Rule 2: Home Screen (Desktop): ALWAYS VISIBLE! NEVER HIDE!
+    if (isDesktop) {
+        if (isHidden) {
+            showIsland();
+        }
+        return;
+    }
+
+    // Rule 3: Browser or Video playback auto-hide
+    const shouldHideInBrowser = isAutoHideBrowsing && isBrowser;
+    const shouldHideInVideo = isAutoHideOnVideo && (isYouTube || isVideoApp || (isBrowser && isPlaying));
+    const shouldHide = shouldHideInBrowser || shouldHideInVideo;
+
+    if (shouldHide) {
+        if (!isHidden) {
+            hideIsland();
+        }
+    } else if (isHidden) {
+        showIsland();
+    }
 }
 
 function resizeIsland(expanded) {
@@ -212,14 +238,14 @@ function toggleIsland() {
 }
 
 function hideIsland() {
-    if (!mainWindow || mainWindow.isDestroyed() || isHidden) return;
+    if (!mainWindow || mainWindow.isDestroyed() || isHidden || isPinned || isExpanded || isPeeking || isMouseOverIsland) return;
     isHidden = true;
     mainWindow.webContents.send('island-visibility-changed', false);
     setTimeout(() => {
-        if (isHidden && mainWindow && !mainWindow.isDestroyed()) {
+        if (isHidden && mainWindow && !mainWindow.isDestroyed() && !isPeeking && !isMouseOverIsland) {
             mainWindow.hide();
         }
-    }, 180);
+    }, 220);
     updateTray();
 }
 
@@ -253,14 +279,16 @@ function updateTray() {
                 checked: isPinned, 
                 click: (item) => {
                     isPinned = item.checked;
+                    settingsService.set('isPinned', isPinned);
                     if (isPinned) resizeIsland(true);
                 } 
             },
             { 
                 label: 'Start on Windows Boot', 
                 type: 'checkbox', 
-                checked: true, 
+                checked: settingsService.get('startOnBoot', true), 
                 click: (item) => {
+                    settingsService.set('startOnBoot', item.checked);
                     try { app.setLoginItemSettings({ openAtLogin: item.checked }); } catch(e){}
                 } 
             },
@@ -307,21 +335,41 @@ function startCursorTracking() {
             const point = screen.getCursorScreenPoint();
             const screenWidth = cachedDisplayBounds.width || 1920;
             const screenHeight = cachedDisplayBounds.height || 1080;
+            const bounds = mainWindow.getBounds();
+            const centerX = bounds.x + (bounds.width / 2);
 
-            // When island is hidden, moving mouse to top bezel (y <= 3) reveals it
+            // Check if cursor is over or near island
+            const overX = point.x >= (bounds.x - 25) && point.x <= (bounds.x + bounds.width + 25);
+            const overY = point.y >= (bounds.y - 12) && point.y <= (bounds.y + bounds.height + 30);
+            isMouseOverIsland = overX && overY;
+
+            // When island is auto-hidden: moving cursor to top bezel (y <= 5) near center peeks the island
             if (isHidden) {
-                const centerX = screenWidth / 2;
-                if (point.y <= 3 && Math.abs(point.x - centerX) < 160) {
+                if (isHoverPeekEnabled && point.y <= 5 && Math.abs(point.x - centerX) < 180) {
+                    isPeeking = true;
+                    if (peekLeaveTimer) { clearTimeout(peekLeaveTimer); peekLeaveTimer = null; }
                     showIsland();
                 }
                 return;
+            }
+
+            // When island was peeked: keep it visible while mouse is near; start cooldown once mouse leaves
+            if (isPeeking) {
+                if (isMouseOverIsland) {
+                    if (peekLeaveTimer) { clearTimeout(peekLeaveTimer); peekLeaveTimer = null; }
+                } else if (!peekLeaveTimer) {
+                    peekLeaveTimer = setTimeout(() => {
+                        peekLeaveTimer = null;
+                        isPeeking = false;
+                        evaluateAutoHide();
+                    }, 1400);
+                }
             }
 
             if (!mainWindow.isVisible()) return;
 
             if (point.x !== lastCursorPos.x || point.y !== lastCursorPos.y) {
                 lastCursorPos = point;
-                const bounds = mainWindow.getBounds();
 
                 // Center of the current island on screen
                 const islandCenterX = bounds.x + (bounds.width / 2);
@@ -365,6 +413,7 @@ ipcMain.on('collapse-island', () => {
 
 ipcMain.on('toggle-pin', (event, val) => {
     isPinned = (val !== undefined) ? val : !isPinned;
+    settingsService.set('isPinned', isPinned);
     event.reply('pin-status', isPinned);
 });
 
@@ -372,8 +421,45 @@ ipcMain.on('tab-changed', (event, tabName) => {
     if (tabName) systemService.setWindowState(isExpanded, tabName);
 });
 
+ipcMain.on('get-settings', (event) => {
+    event.reply('settings-loaded', settingsService.getAll());
+});
+
+ipcMain.on('save-setting', (event, payload) => {
+    if (!payload || !payload.key) return;
+    const { key, value } = payload;
+    settingsService.set(key, value);
+
+    if (key === 'autohideVideo') {
+        isAutoHideOnVideo = (value === true);
+        evaluateAutoHide();
+    } else if (key === 'autohideBrowsing') {
+        isAutoHideBrowsing = (value === true);
+        evaluateAutoHide();
+    } else if (key === 'hoverPeek') {
+        isHoverPeekEnabled = (value !== false);
+    } else if (key === 'alwaysOnTop') {
+        isAlwaysOnTop = (value !== false);
+        try { mainWindow.setAlwaysOnTop(isAlwaysOnTop, 'floating'); } catch (e) {}
+    } else if (key === 'startOnBoot') {
+        try { app.setLoginItemSettings({ openAtLogin: (value === true) }); } catch (e) {}
+    }
+});
+
+ipcMain.on('save-all-settings', (event, newSettings) => {
+    if (newSettings && typeof newSettings === 'object') {
+        settingsService.updateMultiple(newSettings);
+        if ('autohideVideo' in newSettings) isAutoHideOnVideo = (newSettings.autohideVideo === true);
+        if ('autohideBrowsing' in newSettings) isAutoHideBrowsing = (newSettings.autohideBrowsing === true);
+        if ('hoverPeek' in newSettings) isHoverPeekEnabled = (newSettings.hoverPeek !== false);
+        if ('isPinned' in newSettings) isPinned = (newSettings.isPinned === true);
+        evaluateAutoHide();
+    }
+});
+
 ipcMain.on('toggle-cursor-tracking', (event, val) => {
     isTrackingEnabled = (val !== false);
+    settingsService.set('followMouse', isTrackingEnabled);
     if (isTrackingEnabled) {
         startCursorTracking();
     } else {
@@ -418,16 +504,19 @@ ipcMain.on('hide-island', () => hideIsland());
 ipcMain.on('show-island', () => showIsland());
 ipcMain.on('set-autohide-video', (event, val) => {
     isAutoHideOnVideo = (val === true);
-    if (!isAutoHideOnVideo && !isAutoHideBrowsing && isHidden) {
-        showIsland();
-    }
+    settingsService.set('autohideVideo', isAutoHideOnVideo);
+    evaluateAutoHide();
 });
 
 ipcMain.on('set-autohide-browsing', (event, val) => {
     isAutoHideBrowsing = (val === true);
-    if (!isAutoHideBrowsing && !isAutoHideOnVideo && isHidden) {
-        showIsland();
-    }
+    settingsService.set('autohideBrowsing', isAutoHideBrowsing);
+    evaluateAutoHide();
+});
+
+ipcMain.on('set-hover-peek', (event, val) => {
+    isHoverPeekEnabled = (val !== false);
+    settingsService.set('hoverPeek', isHoverPeekEnabled);
 });
 
 ipcMain.on('show-mini-context-menu', (event) => {
@@ -448,6 +537,7 @@ ipcMain.on('show-mini-context-menu', (event) => {
             checked: isPinned, 
             click: (item) => {
                 isPinned = item.checked;
+                settingsService.set('isPinned', isPinned);
                 if (isPinned) resizeIsland(true);
             }
         },
@@ -457,10 +547,14 @@ ipcMain.on('show-mini-context-menu', (event) => {
             submenu: [
                 { label: '😊 Neutral', click: () => mainWindow.webContents.send('set-mood', 'neutral') },
                 { label: '😃 Happy', click: () => mainWindow.webContents.send('set-mood', 'happy') },
+                { label: '🤩 Excited', click: () => mainWindow.webContents.send('set-mood', 'excited') },
+                { label: '🕶️ Cyber Visor', click: () => mainWindow.webContents.send('set-mood', 'cool') },
+                { label: '⚡ Focus Matrix', click: () => mainWindow.webContents.send('set-mood', 'focus') },
                 { label: '💖 Love', click: () => mainWindow.webContents.send('set-mood', 'love') },
                 { label: '👀 Curious', click: () => mainWindow.webContents.send('set-mood', 'curious') },
                 { label: '😉 Wink', click: () => mainWindow.webContents.send('set-mood', 'wink') },
                 { label: '😴 Sleepy', click: () => mainWindow.webContents.send('set-mood', 'sleepy') },
+                { label: '😮 Alert', click: () => mainWindow.webContents.send('set-mood', 'alert') },
                 { label: '💫 Dizzy', click: () => mainWindow.webContents.send('set-mood', 'dizzy') }
             ]
         },

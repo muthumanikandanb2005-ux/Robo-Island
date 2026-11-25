@@ -697,3 +697,363 @@ ipcRenderer.on('set-mood', (event, mood) => {
 
 // Initialize global desktop cursor tracking
 ipcRenderer.send('toggle-cursor-tracking', true);
+
+
+// ==========================================
+// 6. PROCEDURAL FUTURISTIC AUDIO CHIMES (WEB AUDIO API)
+// ==========================================
+let audioCtx = null;
+let soundEffectsEnabled = true;
+
+function getAudioContext() {
+    if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) audioCtx = new AudioContext();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    return audioCtx;
+}
+
+function playFuturisticChime(type = 'wink') {
+    if (!soundEffectsEnabled) return;
+    try {
+        const ctx = getAudioContext();
+        if (!ctx) return;
+        const now = ctx.currentTime;
+
+        if (type === 'wink') {
+            // Cute sci-fi chirp (580Hz -> 880Hz)
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(580, now);
+            osc.frequency.exponentialRampToValueAtTime(880, now + 0.12);
+            gain.gain.setValueAtTime(0.08, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.14);
+        } else if (type === 'timer') {
+            // Celebratory victory chord (520Hz, 660Hz, 880Hz)
+            [520, 660, 880].forEach((freq, idx) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, now + idx * 0.1);
+                gain.gain.setValueAtTime(0.1, now + idx * 0.1);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.1 + 0.4);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now + idx * 0.1);
+                osc.stop(now + idx * 0.1 + 0.45);
+            });
+        } else if (type === 'save') {
+            // Subtle pleasant confirmation ping (720Hz)
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(720, now);
+            gain.gain.setValueAtTime(0.05, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.09);
+        }
+    } catch (e) {}
+}
+
+// ==========================================
+// 7. PERSISTENT SETTINGS ENGINE ("SAVE SETTINGS OPTIONS")
+// ==========================================
+const chkRainbowMode = document.getElementById('chk-rainbow-mode');
+const chkHoverPeek = document.getElementById('chk-hover-peek');
+const chkSoundFx = document.getElementById('chk-sound-fx');
+const chkAlwaysTop = document.getElementById('chk-always-top');
+
+function savePersistentSetting(key, value) {
+    try {
+        localStorage.setItem(`robo_${key}`, JSON.stringify(value));
+    } catch(e) {}
+    ipcRenderer.send('save-setting', { key, value });
+    playFuturisticChime('save');
+    showToast(`✓ Preference Saved: ${key}`);
+}
+
+function loadSavedSettings() {
+    ipcRenderer.send('get-settings');
+}
+
+ipcRenderer.on('settings-loaded', (event, settings) => {
+    if (!settings) return;
+
+    // 1. Mood
+    if (settings.mood) {
+        largeEyes.setMood(settings.mood);
+        miniEyes.setMood(settings.mood);
+        if (roboMoodTag) roboMoodTag.textContent = `Mood: ${settings.mood.toUpperCase()}`;
+        moodBtns.forEach(b => b.classList.toggle('active', b.dataset.mood === settings.mood));
+    }
+
+    // 2. Eye Color
+    if (settings.eyeColor) {
+        largeEyes.setColor(settings.eyeColor);
+        miniEyes.setColor(settings.eyeColor);
+        colorSwatches.forEach(s => s.classList.toggle('active', s.dataset.color === settings.eyeColor));
+    }
+
+    // 3. Rainbow Mode
+    if (chkRainbowMode) {
+        chkRainbowMode.checked = Boolean(settings.rainbowMode);
+        largeEyes.setRainbow(settings.rainbowMode);
+        miniEyes.setRainbow(settings.rainbowMode);
+    }
+
+    // 4. Follow Mouse
+    if (chkFollowMouse) {
+        const follow = settings.followMouse !== false;
+        chkFollowMouse.checked = follow;
+        canTrackMouse = follow;
+        largeEyes.trackMouse = follow;
+        miniEyes.trackMouse = follow;
+    }
+
+    // 5. Auto-Hide Video
+    if (chkAutoHideVideo) {
+        chkAutoHideVideo.checked = Boolean(settings.autohideVideo);
+    }
+
+    // 6. Auto-Hide Browsing
+    if (chkAutoHideIdle) {
+        chkAutoHideIdle.checked = Boolean(settings.autohideBrowsing);
+    }
+
+    // 7. Hover Peek
+    if (chkHoverPeek) {
+        chkHoverPeek.checked = settings.hoverPeek !== false;
+    }
+
+    // 8. Sound Effects
+    if (chkSoundFx) {
+        soundEffectsEnabled = settings.soundEffects !== false;
+        chkSoundFx.checked = soundEffectsEnabled;
+    }
+
+    // 9. Always On Top
+    if (chkAlwaysTop) {
+        chkAlwaysTop.checked = settings.alwaysOnTop !== false;
+    }
+
+    // 10. Volume
+    if (typeof settings.volume === 'number' && volSlider) {
+        volSlider.value = settings.volume;
+        if (volPctText) volPctText.textContent = `${settings.volume}%`;
+    }
+
+    // 11. Visualizer Mode
+    if (settings.visualizerMode) {
+        activeVisualizerMode = settings.visualizerMode;
+        vizBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.viz === activeVisualizerMode));
+    }
+});
+
+// Settings Event Listeners
+if (chkRainbowMode) {
+    chkRainbowMode.addEventListener('change', (e) => {
+        const isRainbow = e.target.checked;
+        largeEyes.setRainbow(isRainbow);
+        miniEyes.setRainbow(isRainbow);
+        savePersistentSetting('rainbowMode', isRainbow);
+    });
+}
+
+if (chkHoverPeek) {
+    chkHoverPeek.addEventListener('change', (e) => {
+        ipcRenderer.send('set-hover-peek', e.target.checked);
+        savePersistentSetting('hoverPeek', e.target.checked);
+    });
+}
+
+if (chkSoundFx) {
+    chkSoundFx.addEventListener('change', (e) => {
+        soundEffectsEnabled = e.target.checked;
+        savePersistentSetting('soundEffects', soundEffectsEnabled);
+    });
+}
+
+if (chkAlwaysTop) {
+    chkAlwaysTop.addEventListener('change', (e) => {
+        ipcRenderer.send('save-setting', { key: 'alwaysOnTop', value: e.target.checked });
+        savePersistentSetting('alwaysOnTop', e.target.checked);
+    });
+}
+
+// Hook into existing mood/color pickers for auto-save
+moodBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        const mood = btn.dataset.mood;
+        savePersistentSetting('mood', mood);
+        playFuturisticChime('wink');
+    });
+});
+
+colorSwatches.forEach(swatch => {
+    swatch.addEventListener('click', () => {
+        const color = swatch.dataset.color;
+        if (chkRainbowMode) chkRainbowMode.checked = false;
+        largeEyes.setRainbow(false);
+        miniEyes.setRainbow(false);
+        savePersistentSetting('eyeColor', color);
+        savePersistentSetting('rainbowMode', false);
+    });
+});
+
+// Update wink trigger to play chime
+const origAvatarClick = roboAvatarWrapper ? roboAvatarWrapper.onclick : null;
+if (roboAvatarWrapper) {
+    roboAvatarWrapper.addEventListener('click', () => {
+        playFuturisticChime('wink');
+    });
+}
+
+// ==========================================
+// 8. AUDIO VISUALIZER MODES & MASTER VOLUME SLIDER
+// ==========================================
+const vizBtns = document.querySelectorAll('.viz-btn');
+const volSlider = document.getElementById('vol-slider');
+const volPctText = document.getElementById('vol-pct-text');
+let activeVisualizerMode = 'wave';
+
+vizBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        vizBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeVisualizerMode = btn.dataset.viz;
+        savePersistentSetting('visualizerMode', activeVisualizerMode);
+    });
+});
+
+if (volSlider) {
+    volSlider.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        if (volPctText) volPctText.textContent = `${val}%`;
+    });
+    volSlider.addEventListener('change', (e) => {
+        const val = parseInt(e.target.value, 10);
+        savePersistentSetting('volume', val);
+        showToast(`Volume: ${val}%`);
+    });
+}
+
+// ==========================================
+// 9. PRODUCTIVITY FOCUS & POMODORO TIMER
+// ==========================================
+const pomoTimeDisplay = document.getElementById('pomo-time-display');
+const pomoProgressBar = document.getElementById('pomo-progress-bar');
+const pomoStatusTag = document.getElementById('pomo-status-tag');
+const btnPomoToggle = document.getElementById('btn-pomo-toggle');
+const btnPomoReset = document.getElementById('btn-pomo-reset');
+const pomoPresetBtns = document.querySelectorAll('.pomo-preset-btn');
+
+let pomoTotalSeconds = 25 * 60;
+let pomoRemainingSeconds = 25 * 60;
+let pomoTimerId = null;
+let isPomoRunning = false;
+
+function renderPomoDisplay() {
+    const m = Math.floor(pomoRemainingSeconds / 60);
+    const s = pomoRemainingSeconds % 60;
+    if (pomoTimeDisplay) pomoTimeDisplay.textContent = `${m}:${s < 10 ? '0' : ''}${s}`;
+    if (pomoProgressBar) {
+        const pct = pomoTotalSeconds > 0 ? (pomoRemainingSeconds / pomoTotalSeconds) * 100 : 0;
+        pomoProgressBar.style.width = `${pct}%`;
+    }
+}
+
+pomoPresetBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        pomoPresetBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const mins = parseInt(btn.dataset.mins, 10) || 25;
+        pomoTotalSeconds = mins * 60;
+        pomoRemainingSeconds = pomoTotalSeconds;
+        if (isPomoRunning) {
+            clearInterval(pomoTimerId);
+            isPomoRunning = false;
+            btnPomoToggle.textContent = '▶ Start';
+        }
+        if (pomoStatusTag) {
+            pomoStatusTag.textContent = `${mins}m Set`;
+            pomoStatusTag.className = 'pomo-badge tag-cyan';
+        }
+        renderPomoDisplay();
+    });
+});
+
+if (btnPomoToggle) {
+    btnPomoToggle.addEventListener('click', () => {
+        if (!isPomoRunning) {
+            isPomoRunning = true;
+            btnPomoToggle.textContent = '⏸ Pause';
+            btnPomoToggle.className = 'pomo-btn secondary';
+            if (pomoStatusTag) {
+                pomoStatusTag.textContent = 'Focusing';
+                pomoStatusTag.className = 'pomo-badge tag-green';
+            }
+            largeEyes.setMood('focus');
+            miniEyes.setMood('focus');
+
+            pomoTimerId = setInterval(() => {
+                if (pomoRemainingSeconds > 0) {
+                    pomoRemainingSeconds--;
+                    renderPomoDisplay();
+                } else {
+                    clearInterval(pomoTimerId);
+                    isPomoRunning = false;
+                    btnPomoToggle.textContent = '▶ Start';
+                    btnPomoToggle.className = 'pomo-btn primary';
+                    if (pomoStatusTag) {
+                        pomoStatusTag.textContent = 'Completed! 🎉';
+                        pomoStatusTag.className = 'pomo-badge tag-pink';
+                    }
+                    largeEyes.setMood('excited');
+                    miniEyes.setMood('excited');
+                    playFuturisticChime('timer');
+                    showToast('🎉 Focus Session Completed! Great job!', 3500);
+                }
+            }, 1000);
+        } else {
+            clearInterval(pomoTimerId);
+            isPomoRunning = false;
+            btnPomoToggle.textContent = '▶ Resume';
+            btnPomoToggle.className = 'pomo-btn primary';
+            if (pomoStatusTag) {
+                pomoStatusTag.textContent = 'Paused';
+                pomoStatusTag.className = 'pomo-badge tag-amber';
+            }
+        }
+    });
+}
+
+if (btnPomoReset) {
+    btnPomoReset.addEventListener('click', () => {
+        if (pomoTimerId) clearInterval(pomoTimerId);
+        isPomoRunning = false;
+        pomoRemainingSeconds = pomoTotalSeconds;
+        if (btnPomoToggle) {
+            btnPomoToggle.textContent = '▶ Start';
+            btnPomoToggle.className = 'pomo-btn primary';
+        }
+        if (pomoStatusTag) {
+            pomoStatusTag.textContent = 'Ready';
+            pomoStatusTag.className = 'pomo-badge tag-cyan';
+        }
+        renderPomoDisplay();
+    });
+}
+
+// Initial Settings Load on Launch
+loadSavedSettings();

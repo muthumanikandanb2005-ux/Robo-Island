@@ -168,10 +168,11 @@ while ($true) {
         $fgTitle = [WinHelper]::GetActiveWindowTitle()
         $fgClass = [WinHelper]::GetActiveClassName()
 
-        # Desktop is active if explorer is focused with Progman/WorkerW class or title Program Manager, or if no window is focused
-        $isDesktop = ($fgProc -eq "explorer" -and ($fgClass -eq "Progman" -or $fgClass -eq "WorkerW" -or $fgTitle -eq "Program Manager")) -or ($fgProc -eq "")
-        $isBrowser = [bool]($fgProc -match "(chrome|msedge|brave|firefox|opera|vivaldi|arc|browser)")
+        # Desktop is active if explorer is focused with Progman/WorkerW/Taskbar class or title Program Manager, or if no window is focused
+        $isDesktop = ($fgProc -eq "explorer" -and ($fgClass -eq "Progman" -or $fgClass -eq "WorkerW" -or $fgTitle -eq "Program Manager" -or $fgClass -eq "Shell_TrayWnd" -or $fgClass -eq "Shell_SecondaryTrayWnd")) -or ($fgProc -eq "") -or ($fgProc -like "*robo*island*")
+        $isBrowser = [bool]($fgProc -match "(chrome|msedge|brave|firefox|opera|vivaldi|arc|zen|waterfox)")
         $isYouTube = [bool]($fgTitle -like "*YouTube*" -or $fgTitle -like "*youtube.com*")
+        $isVideoApp = [bool]($fgProc -match "(vlc|potplayer|mpv|netflix|wmplayer|movies.*tv|kmplayer)")
 
         # Query session state
         if ($manager) {
@@ -198,6 +199,7 @@ while ($true) {
                 isDesktop = [bool]$isDesktop
                 isBrowser = [bool]$isBrowser
                 isYouTube = [bool]$isYouTube
+                isVideoApp = [bool]$isVideoApp
             }
             [Console]::WriteLine(($res | ConvertTo-Json -Compress))
         } else {
@@ -210,6 +212,7 @@ while ($true) {
                 isDesktop = [bool]$isDesktop
                 isBrowser = [bool]$isBrowser
                 isYouTube = [bool]$isYouTube
+                isVideoApp = [bool]$isVideoApp
             }
             [Console]::WriteLine(($res | ConvertTo-Json -Compress))
         }

@@ -28,10 +28,12 @@ class RoboEyes {
         this.lastSaccadeTime = Date.now();
         this.nextSaccadeInterval = 1400 + Math.random() * 2500;
 
-        // Music pulse
+        // Music pulse & Rainbow Chroma
         this.isMusicPlaying = false;
         this.pulsePhase = 0;
         this.isHighLoad = false;
+        this.rainbowMode = false;
+        this.rainbowHue = 0;
 
         // Geometry (Proportionate for 80x26 mini and 110x40 large canvas)
         this.eyeWidth = this.options.mini ? 14 : 26;
@@ -50,6 +52,10 @@ class RoboEyes {
 
     setColor(colorHex) {
         this.options.primaryColor = colorHex;
+    }
+
+    setRainbow(enabled) {
+        this.rainbowMode = Boolean(enabled);
     }
 
     setMusicPlaying(isPlaying) {
@@ -137,6 +143,12 @@ class RoboEyes {
         // 4. Music pulse
         if (this.isMusicPlaying) {
             this.pulsePhase += dt * 6.5;
+        }
+
+        // 5. Chroma Rainbow Dynamic RGB Glow
+        if (this.rainbowMode) {
+            this.rainbowHue = (this.rainbowHue + dt * 65) % 360;
+            this.options.primaryColor = `hsl(${Math.round(this.rainbowHue)}, 100%, 55%)`;
         }
     }
 
@@ -232,6 +244,81 @@ class RoboEyes {
             ctx.moveTo(w / 2.5, -h / 2.5);
             ctx.lineTo(-w / 2.5, h / 2.5);
             ctx.stroke();
+
+        } else if (this.mood === 'excited') {
+            // Star & Cheerful sparkling eye
+            ctx.fillStyle = this.options.primaryColor;
+            ctx.beginPath();
+            const starR = w / 2;
+            for (let i = 0; i < 4; i++) {
+                const angle = (i * Math.PI) / 2;
+                ctx.lineTo(Math.cos(angle) * starR, Math.sin(angle) * (starR * 1.15));
+                const innerAngle = angle + Math.PI / 4;
+                ctx.lineTo(Math.cos(innerAngle) * (starR * 0.35), Math.sin(innerAngle) * (starR * 0.35));
+            }
+            ctx.closePath();
+            ctx.fill();
+
+            // Sparkle center
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(0, 0, this.options.mini ? 1.5 : 3.0, 0, Math.PI * 2);
+            ctx.fill();
+
+        } else if (this.mood === 'cool') {
+            // Cyberpunk Visor / Sunglasses
+            ctx.fillStyle = '#0a0a0f';
+            ctx.strokeStyle = this.options.primaryColor;
+            ctx.lineWidth = this.options.mini ? 1.5 : 2.5;
+
+            const vW = w * 1.1;
+            const vH = effectiveHeight * 0.75;
+            ctx.beginPath();
+            ctx.roundRect(-vW / 2, -vH / 2, vW, vH, this.options.mini ? 3 : 5);
+            ctx.fill();
+            ctx.stroke();
+
+            // Neon reflection line
+            ctx.strokeStyle = this.options.primaryColor;
+            ctx.lineWidth = this.options.mini ? 1.2 : 2.0;
+            ctx.beginPath();
+            ctx.moveTo(-vW * 0.3, -vH * 0.15);
+            ctx.lineTo(vW * 0.3, -vH * 0.15);
+            ctx.stroke();
+
+        } else if (this.mood === 'focus') {
+            // Sharp Matrix / Focused Slit Eyes
+            ctx.fillStyle = this.options.primaryColor;
+            const fW = w * 1.05;
+            const fH = Math.max(3, effectiveHeight * 0.55);
+            ctx.beginPath();
+            ctx.roundRect(-fW / 2, -fH / 2, fW, fH, 2);
+            ctx.fill();
+
+            // Concentrated pupil center
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(this.currentLookX * 4, 0, this.options.mini ? 1.2 : 2.2, 0, Math.PI * 2);
+            ctx.fill();
+
+        } else if (this.mood === 'alert') {
+            // Wide Round Alert / Surprised Eyes
+            ctx.fillStyle = this.options.primaryColor;
+            const aRadius = Math.max(w, effectiveHeight) / 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, aRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Large pupil
+            ctx.fillStyle = '#000000';
+            ctx.beginPath();
+            ctx.arc(this.currentLookX * 3, this.currentLookY * 3, aRadius * 0.45, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(this.currentLookX * 3 - aRadius * 0.15, this.currentLookY * 3 - aRadius * 0.15, aRadius * 0.18, 0, Math.PI * 2);
+            ctx.fill();
 
         } else {
             // Standard rounded capsule eyes

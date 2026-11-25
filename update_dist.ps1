@@ -18,6 +18,7 @@ $filesToCopy = @(
     "media-service.js",
     "media_daemon.ps1",
     "system-service.js",
+    "settings-service.js",
     "package.json",
     "icon.ico",
     "icon.png",

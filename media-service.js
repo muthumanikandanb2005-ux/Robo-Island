@@ -78,12 +78,12 @@ class MediaService extends EventEmitter {
             }
         });
 
-        // Periodic poll every 1.5 seconds for media updates
+        // Periodic poll every 800ms for snappy media & active window updates
         setInterval(() => {
             if (this.isReady) {
                 this.sendCommand('status');
             }
-        }, 1500);
+        }, 800);
     }
 
     sendCommand(cmd) {
