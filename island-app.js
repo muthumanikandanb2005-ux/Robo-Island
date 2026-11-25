@@ -31,6 +31,8 @@ const timeCurrent = document.getElementById('time-current');
 const timeTotal = document.getElementById('time-total');
 const timelineProgress = document.getElementById('timeline-progress');
 const timelineClickableArea = document.getElementById('timeline-clickable-area');
+const timelineTooltip = document.getElementById('timeline-tooltip');
+const timelineThumb = document.getElementById('timeline-thumb');
 const btnPrev = document.getElementById('btn-prev');
 const btnPlayPause = document.getElementById('btn-playpause');
 const btnNext = document.getElementById('btn-next');
@@ -94,6 +96,9 @@ let currentMediaState = null;
 let localPlayPosition = 0;
 let localDuration = 0;
 let isPlaying = false;
+let isScrubbing = false;
+let seekCooldown = 0;
+let lastMediaTitle = '';
 let waveAnimFrameId = null;
 
 // ==========================================
@@ -268,28 +273,114 @@ function formatTime(seconds) {
 
 function updateProgressDisplay() {
     timeCurrent.textContent = formatTime(localPlayPosition);
-    timeTotal.textContent = formatTime(localDuration);
-    const percent = (localDuration > 0) ? Math.min(100, Math.max(0, (localPlayPosition / localDuration) * 100)) : 0;
-    timelineProgress.style.width = `${percent}%`;
+
+    if (localDuration > 0) {
+        timeTotal.textContent = formatTime(localDuration);
+        const percent = Math.min(100, Math.max(0, (localPlayPosition / localDuration) * 100));
+        timelineProgress.classList.remove('streaming-pulse');
+        timelineProgress.style.width = `${percent}%`;
+    } else if (isPlaying) {
+        timeTotal.textContent = '--:--';
+        timelineProgress.classList.add('streaming-pulse');
+    } else {
+        timeTotal.textContent = '0:00';
+        timelineProgress.classList.remove('streaming-pulse');
+        timelineProgress.style.width = '0%';
+    }
 }
 
-// 1-second ticker: advances progress bar locally without heavy polling
+// 250ms high-precision smooth ticker: advances progressive bar locally with high fluidity
+let lastTickerTick = performance.now();
 setInterval(() => {
-    if (isPlaying && localDuration > 0) {
-        localPlayPosition = Math.min(localDuration, localPlayPosition + 1);
+    const now = performance.now();
+    const dt = (now - lastTickerTick) / 1000;
+    lastTickerTick = now;
+
+    if (isPlaying && !isScrubbing) {
+        if (localDuration > 0) {
+            localPlayPosition = Math.min(localDuration, localPlayPosition + dt);
+        } else {
+            // Live stream / YouTube / browser audio with unknown duration
+            localPlayPosition += dt;
+        }
         updateProgressDisplay();
     }
-}, 1000);
+}, 250);
 
-// Interactive Click-to-Seek Progressive Bar
-timelineClickableArea.addEventListener('click', (e) => {
+// Helper to calculate seek ratio from mouse event
+function getTimelineRatio(e) {
     const rect = timelineClickableArea.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
-    const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+    return Math.max(0, Math.min(1, clickX / rect.width));
+}
 
+// Hover preview tooltip & live time preview
+timelineClickableArea.addEventListener('mousemove', (e) => {
+    if (timelineTooltip) {
+        const ratio = getTimelineRatio(e);
+        const rect = timelineClickableArea.getBoundingClientRect();
+        const tooltipX = Math.max(16, Math.min(rect.width - 16, e.clientX - rect.left));
+        timelineTooltip.style.left = `${tooltipX}px`;
+
+        if (localDuration > 0) {
+            const previewSeconds = Math.round(ratio * localDuration);
+            timelineTooltip.textContent = formatTime(previewSeconds);
+        } else {
+            timelineTooltip.textContent = formatTime(localPlayPosition);
+        }
+    }
+});
+
+// Interactive Click & Drag Scrubbing
+timelineClickableArea.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    isScrubbing = true;
+    timelineClickableArea.classList.add('scrubbing');
+    timelineProgress.classList.add('no-transition');
+
+    const ratio = getTimelineRatio(e);
+    if (localDuration > 0) {
+        localPlayPosition = ratio * localDuration;
+    }
+    updateProgressDisplay();
+});
+
+window.addEventListener('mousemove', (e) => {
+    if (!isScrubbing) return;
+    const ratio = getTimelineRatio(e);
+    if (localDuration > 0) {
+        localPlayPosition = ratio * localDuration;
+    }
+    updateProgressDisplay();
+
+    if (timelineTooltip) {
+        const rect = timelineClickableArea.getBoundingClientRect();
+        const tooltipX = Math.max(16, Math.min(rect.width - 16, e.clientX - rect.left));
+        timelineTooltip.style.left = `${tooltipX}px`;
+        const previewSeconds = (localDuration > 0) ? Math.round(ratio * localDuration) : Math.round(localPlayPosition);
+        timelineTooltip.textContent = formatTime(previewSeconds);
+    }
+});
+
+window.addEventListener('mouseup', (e) => {
+    if (!isScrubbing) return;
+    isScrubbing = false;
+    timelineClickableArea.classList.remove('scrubbing');
+    timelineProgress.classList.remove('no-transition');
+
+    const targetSeconds = Math.round(localPlayPosition);
+    seekCooldown = Date.now() + 2000; // 2-second grace period against stale incoming polling snapshots
+    ipcRenderer.send('media-action', { action: 'seek', param: targetSeconds });
+    updateProgressDisplay();
+});
+
+// Click fallback
+timelineClickableArea.addEventListener('click', (e) => {
+    const ratio = getTimelineRatio(e);
     if (localDuration > 0) {
         const targetSeconds = Math.round(ratio * localDuration);
         localPlayPosition = targetSeconds;
+        seekCooldown = Date.now() + 2000;
         updateProgressDisplay();
         ipcRenderer.send('media-action', { action: 'seek', param: targetSeconds });
     }
@@ -341,17 +432,39 @@ function renderMedia(data) {
         else if (src.includes('vlc')) sourceName = 'VLC';
         mediaSourceBadge.textContent = sourceName;
 
-        if (typeof data.position === 'number' && data.position >= 0) {
-            localPlayPosition = data.position;
-        }
-        if (typeof data.duration === 'number' && data.duration > 0) {
-            localDuration = data.duration;
+        const currentTitle = (data.title || '').trim();
+        if (currentTitle && currentTitle !== lastMediaTitle) {
+            // New track detected: cleanly reset timeline
+            lastMediaTitle = currentTitle;
+            localPlayPosition = (typeof data.position === 'number' && data.position >= 0) ? data.position : 0;
+            localDuration = (typeof data.duration === 'number' && data.duration > 0) ? data.duration : 0;
+            seekCooldown = 0;
+        } else {
+            // Same track: update duration if available
+            if (typeof data.duration === 'number' && data.duration > 0) {
+                localDuration = data.duration;
+            }
+            // Update position only if outside seekCooldown and not actively scrubbing
+            const now = Date.now();
+            if (!isScrubbing && now > seekCooldown) {
+                if (typeof data.position === 'number' && data.position >= 0) {
+                    const diff = Math.abs(localPlayPosition - data.position);
+                    // Sync only if difference is significant (> 1.5s) to avoid jitter with local smooth ticker
+                    if (diff > 1.5 || localDuration <= 0) {
+                        localPlayPosition = data.position;
+                    }
+                }
+            }
         }
         updateProgressDisplay();
     } else {
+        lastMediaTitle = '';
+        localPlayPosition = 0;
+        localDuration = 0;
         trackTitle.textContent = 'Ready for Media';
         trackArtist.textContent = 'Play on YouTube, Spotify, or your favorite music player';
         mediaSourceBadge.textContent = 'Ready';
+        timelineProgress.classList.remove('streaming-pulse');
         timelineProgress.style.width = '0%';
         timeCurrent.textContent = '0:00';
         timeTotal.textContent = '0:00';
@@ -968,7 +1081,9 @@ function renderPomoDisplay() {
     const s = pomoRemainingSeconds % 60;
     if (pomoTimeDisplay) pomoTimeDisplay.textContent = `${m}:${s < 10 ? '0' : ''}${s}`;
     if (pomoProgressBar) {
-        const pct = pomoTotalSeconds > 0 ? (pomoRemainingSeconds / pomoTotalSeconds) * 100 : 0;
+        // Progressive bar fills from 0% up to 100% as time is focused
+        const elapsed = pomoTotalSeconds - pomoRemainingSeconds;
+        const pct = pomoTotalSeconds > 0 ? Math.min(100, Math.max(0, (elapsed / pomoTotalSeconds) * 100)) : 0;
         pomoProgressBar.style.width = `${pct}%`;
     }
 }

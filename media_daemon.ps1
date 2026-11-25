@@ -157,7 +157,8 @@ while ($true) {
                     try {
                         $secs = [double]$param
                         $ticks = [long]($secs * 10000000)
-                        $null = $session.TryChangePlaybackPositionAsync($ticks)
+                        $seekOp = $session.TryChangePlaybackPositionAsync($ticks)
+                        $null = Await $seekOp ([bool])
                     } catch {}
                 }
             }
@@ -185,6 +186,30 @@ while ($true) {
             $info = $session.GetPlaybackInfo()
             $timeline = $session.GetTimelineProperties()
 
+            $dur = 0
+            $pos = 0
+            if ($timeline) {
+                if ($timeline.EndTime.TotalSeconds -gt 0) {
+                    $dur = [Math]::Round($timeline.EndTime.TotalSeconds, 1)
+                } elseif ($timeline.MaxSeekTime.TotalSeconds -gt 0) {
+                    $dur = [Math]::Round($timeline.MaxSeekTime.TotalSeconds, 1)
+                }
+
+                $pos = $timeline.Position.TotalSeconds
+                if ($info -and $info.PlaybackStatus.ToString() -eq "Playing" -and $timeline.LastUpdatedTime) {
+                    try {
+                        $elapsed = ([DateTimeOffset]::UtcNow - $timeline.LastUpdatedTime).TotalSeconds
+                        if ($elapsed -gt 0 -and $elapsed -lt 86400) {
+                            $pos += $elapsed
+                        }
+                    } catch {}
+                }
+                if ($dur -gt 0 -and $pos -gt $dur) {
+                    $pos = $dur
+                }
+                $pos = [Math]::Round([Math]::Max(0, $pos), 1)
+            }
+
             $res = @{
                 success = $true
                 title = if ($props) { $props.Title } else { "" }
@@ -192,8 +217,8 @@ while ($true) {
                 albumTitle = if ($props) { $props.AlbumTitle } else { "" }
                 source = $session.SourceAppUserModelId
                 status = if ($info) { $info.PlaybackStatus.ToString() } else { "Unknown" }
-                position = if ($timeline) { [Math]::Round($timeline.Position.TotalSeconds, 1) } else { 0 }
-                duration = if ($timeline) { [Math]::Round($timeline.EndTime.TotalSeconds, 1) } else { 0 }
+                position = $pos
+                duration = $dur
                 fgProcess = $fgProc
                 fgTitle = $fgTitle
                 isDesktop = [bool]$isDesktop
